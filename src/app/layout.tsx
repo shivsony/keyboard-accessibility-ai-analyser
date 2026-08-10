@@ -27,7 +27,19 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      {/*
+        Browser extensions add attributes to <body> before React hydrates —
+        ColorZilla's `cz-shortcut-listen`, Grammarly's `data-gr-*`, and others —
+        and every one of them reports as a hydration mismatch the user cannot
+        act on.
+
+        This suppresses the warning for this element's own attributes only. It
+        does not extend to children, so a genuine mismatch anywhere inside the
+        app still surfaces.
+      */}
+      <body className="flex min-h-full flex-col" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

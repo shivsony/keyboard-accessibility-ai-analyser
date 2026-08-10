@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { ApiError, StartAuditResponse } from "@/lib/shared/api-types";
+import type { ApiError, AuditResponse, StartAuditResponse } from "@/lib/shared/api-types";
 
 /**
  * Starts an audit and sends the user to its live view.
@@ -20,6 +20,16 @@ export function StartAuditForm() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+
+  useEffect(() => {
+    const checkAPIhealth = async () => {
+      const response = await fetch(`/api/health`);
+      const body = await response.json();
+      console.log(body);
+    };
+
+    checkAPIhealth();
+  }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
