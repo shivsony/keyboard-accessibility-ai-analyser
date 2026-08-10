@@ -211,6 +211,8 @@ export function makeGraph(overrides: Partial<NavigationGraph> = {}): NavigationG
         url: TEST_URL,
         focusKind: "ELEMENT",
         elementId: elementId("a"),
+        role: "button",
+        accessibleName: "Element a",
         firstSeenAtStep: 0,
         visitCount: 1,
       },

@@ -2,7 +2,13 @@ import { z } from "zod";
 
 import { KeyboardActionSchema } from "./keyboard";
 import type { NodeId } from "./primitives";
-import { ElementIdSchema, NodeIdSchema, StepIndexSchema, UrlSchema } from "./primitives";
+import {
+  ElementIdSchema,
+  NodeIdSchema,
+  StepIndexSchema,
+  TimestampSchema,
+  UrlSchema,
+} from "./primitives";
 
 /**
  * A distinct focus position the agent has occupied.
@@ -18,7 +24,16 @@ export const NavigationNodeSchema = z.object({
   focusKind: z.enum(["ELEMENT", "BODY", "OUTSIDE_PAGE", "UNKNOWN"]),
   /** The focused element, when `focusKind` is ELEMENT. */
   elementId: ElementIdSchema.nullable(),
+  /**
+   * Role and name are copied onto the node rather than looked up through
+   * `elementId`. A traversal path has to be readable on its own — "Logo → Search
+   * → Menu" is the evidence a human checks, and it should not require joining
+   * against a separate element table to render.
+   */
+  role: z.string().nullable(),
+  accessibleName: z.string().nullable(),
   firstSeenAtStep: StepIndexSchema,
+  /** How many times the traversal has arrived here. Repeats are the signal. */
   visitCount: z.number().int().positive(),
 });
 export type NavigationNode = z.infer<typeof NavigationNodeSchema>;
@@ -34,6 +49,7 @@ export const NavigationEdgeSchema = z.object({
   to: NodeIdSchema,
   action: KeyboardActionSchema,
   atStep: StepIndexSchema,
+  at: TimestampSchema,
 });
 export type NavigationEdge = z.infer<typeof NavigationEdgeSchema>;
 

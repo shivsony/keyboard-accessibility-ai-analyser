@@ -170,11 +170,21 @@ describe("AgentState invariants", () => {
               url: TEST_URL,
               focusKind: "ELEMENT",
               elementId: elementId("a"),
+              role: "button",
+              accessibleName: "A",
               firstSeenAtStep: 0,
               visitCount: 1,
             },
           ],
-          edges: [{ from: nodeId("n0"), to: nodeId("n404"), action: "TAB", atStep: 0 }],
+          edges: [
+            {
+              from: nodeId("n0"),
+              to: nodeId("n404"),
+              action: "TAB",
+              atStep: 0,
+              at: at(0),
+            },
+          ],
         },
       });
 
@@ -191,11 +201,21 @@ describe("AgentState invariants", () => {
               url: TEST_URL,
               focusKind: "ELEMENT",
               elementId: elementId("a"),
+              role: "button",
+              accessibleName: "A",
               firstSeenAtStep: 0,
               visitCount: 2,
             },
           ],
-          edges: [{ from: nodeId("n0"), to: nodeId("n0"), action: "TAB", atStep: 0 }],
+          edges: [
+            {
+              from: nodeId("n0"),
+              to: nodeId("n0"),
+              action: "TAB",
+              atStep: 0,
+              at: at(0),
+            },
+          ],
         },
       });
 
