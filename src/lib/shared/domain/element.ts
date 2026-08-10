@@ -86,3 +86,16 @@ export function focusOn(element: InteractiveElement): FocusState {
 export function focusedElement(focus: FocusState): InteractiveElement | null {
   return focus.kind === "ELEMENT" ? focus.element : null;
 }
+
+/**
+ * Whether two focus states are the same position.
+ *
+ * Identity, not deep equality: the same element re-observed carries a fresh
+ * bounding box and a later `discoveredAtStep`, and neither means focus moved.
+ * Comparing whole records would report a change on every keypress.
+ */
+export function isSameFocus(a: FocusState, b: FocusState): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "ELEMENT" && b.kind === "ELEMENT") return a.element.id === b.element.id;
+  return true;
+}

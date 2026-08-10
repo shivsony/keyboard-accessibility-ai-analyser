@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Immobile focus</title>
+  </head>
+  <body>
+    <main>
+      <h1>Immobile focus</h1>
+      <button id="stuck">Stuck</button>
+      <button id="unreachable-by-tab">Never reached</button>
+    </main>
+
+    <script>
+      // Tab is swallowed outright, so focus never moves. A real pattern — usually
+      // a keyboard handler that calls preventDefault too broadly — and the case
+      // where the executor must report focusChanged: false.
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Tab") event.preventDefault();
+      });
+
+      document.getElementById("stuck").focus();
+    </script>
+  </body>
+</html>

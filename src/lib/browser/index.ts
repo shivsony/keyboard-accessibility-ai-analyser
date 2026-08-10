@@ -14,4 +14,11 @@ export * from "./errors";
 export * from "./keys";
 export { Deadline, withTimeout } from "./deadline";
 export { ObservationEngine } from "./observation-engine";
+export {
+  KeyboardExecutor,
+  DEFAULT_SETTLE_MS,
+  type KeyboardExecutionResult,
+  type KeyboardExecutorOptions,
+  type KeyboardTarget,
+} from "./keyboard-executor";
 export { PlaywrightBrowserController, withBrowserSession } from "./playwright-controller";
