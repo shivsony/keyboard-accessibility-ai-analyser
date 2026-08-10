@@ -4,6 +4,8 @@ import type { KeyboardExecutor, PageController } from "@/lib/browser";
 import { isBrowserLayerError } from "@/lib/browser";
 import { describePath, nodeIdForFocus, traversalPath } from "@/lib/graph";
 import {
+  activeInvestigation,
+  agentMode,
   checkAgentStateInvariants,
   createInitialAgentState,
   elementId as toElementId,
@@ -11,6 +13,7 @@ import {
   type AgentDecision,
   type AgentState,
   type AgentStep,
+  type KeyboardAction,
   type AuditId,
   type FocusState,
   type StepIndex,
@@ -20,6 +23,13 @@ import {
 } from "@/lib/shared/domain";
 
 import { guardDecision, rejectMalformed, validateDecision } from "./action-guard";
+import {
+  abandonInvestigation,
+  confirmInvestigation,
+  investigationExhausted,
+  openInvestigation,
+  recordInvestigationAttempt,
+} from "./investigation";
 import {
   addSuspectedFinding,
   appendStep,
@@ -60,6 +70,13 @@ export type ExplorationOptions = {
    * other Tab — so this is a threshold rather than a tripwire.
    */
   readonly repeatedStateThreshold: number;
+  /**
+   * Keypresses one investigation may spend before it is abandoned.
+   *
+   * An agent that has pressed a dozen keys without concluding is not about to
+   * conclude on the next one, and the rest of the page still needs covering.
+   */
+  readonly maxInvestigationSteps: number;
   readonly signal?: AbortSignal;
   /** Injected in tests. */
   readonly now?: () => number;
@@ -70,6 +87,7 @@ export const DEFAULT_EXPLORATION_OPTIONS: Omit<ExplorationOptions, "signal" | "n
     maxSteps: 150,
     maxDurationMs: 300_000,
     repeatedStateThreshold: 6,
+    maxInvestigationSteps: 12,
   });
 
 export type ExplorationDependencies = {
@@ -167,6 +185,7 @@ export class ExplorationAgent {
       if (!validation.valid) {
         state = appendStep(state, {
           index: step,
+          mode: agentMode(state),
           observation: this.#requireObservation(state),
           decision: raw,
           guardVerdict: rejectMalformed(validation.problem),
@@ -183,6 +202,10 @@ export class ExplorationAgent {
       // keypress changes anything, because a step's record must show what was
       // known when the choice was made, not what the choice produced.
       const decidedFrom = this.#requireObservation(state);
+
+      // Likewise the mode: this step was taken while investigating, or while
+      // exploring, and the decision it produces may change that.
+      const modeAtDecision = agentMode(state);
 
       // ---- GUARD ----------------------------------------------------------
       const verdict = guardDecision(decision);
@@ -202,6 +225,7 @@ export class ExplorationAgent {
         if (executed.outcome === "FAILED") {
           state = appendStep(state, {
             index: step,
+            mode: modeAtDecision,
             observation: decidedFrom,
             decision,
             guardVerdict: verdict,
@@ -240,6 +264,7 @@ export class ExplorationAgent {
 
       const completedStep: AgentStep = {
         index: step,
+        mode: modeAtDecision,
         observation: decidedFrom,
         decision,
         guardVerdict: verdict,
@@ -249,6 +274,12 @@ export class ExplorationAgent {
       };
 
       state = appendStep(state, completedStep);
+      state = this.#applyInvestigation(state, {
+        decision,
+        step,
+        at: observedAt,
+        executedAction: completedStep.executedAction,
+      });
       state = this.#recordIssue(state, decision, step, observedAt);
 
       // Development-time check that the transitions above kept memory coherent.
@@ -391,11 +422,92 @@ export class ExplorationAgent {
       keyboardHistory: state.keyboardHistory,
       navigationSummary: describePath(traversalPath(state.navigationGraph)),
       suspectedFindings: state.suspectedFindings,
+      investigation: activeInvestigation(state),
       // The image input. Without it the provider fails the step rather than
       // quietly reasoning from text alone.
       screenshot: this.#latestScreenshot,
       stepsRemaining: Math.max(0, this.#options.maxSteps - state.currentStep),
     };
+  }
+
+  /**
+   * Moves the open line of enquiry along, or opens or closes one.
+   *
+   * The state machine in one place:
+   *
+   * - `INVESTIGATE` opens an investigation, or feeds the open one. Switching to
+   *   a *different* issue type abandons the current line first — an agent
+   *   chasing two questions at once is chasing neither, and the evidence for
+   *   each would be interleaved with the other's keypresses.
+   * - `CONTINUE` while investigating abandons it. The agent has chosen to
+   *   resume ordinary exploration, which is exactly what dropping a false
+   *   suspicion looks like from outside.
+   * - `REPORT` confirms it.
+   * - `STOP` closes it as abandoned; the run is over either way.
+   *
+   * An investigation that outstays its budget is abandoned too, so a line of
+   * enquiry cannot quietly consume the whole run.
+   */
+  #applyInvestigation(
+    state: AgentState,
+    params: {
+      decision: AgentDecision;
+      step: StepIndex;
+      at: string;
+      executedAction: KeyboardAction | null;
+    },
+  ): AgentState {
+    const { decision, step, at } = params;
+    const current = activeInvestigation(state);
+
+    if (decision.decision === "INVESTIGATE") {
+      const changedSubject =
+        current !== null && current.issueType !== decision.suspectedIssue.type;
+
+      let next = changedSubject
+        ? abandonInvestigation(state, { at, reason: "AGENT_MOVED_ON" })
+        : state;
+
+      if (current === null || changedSubject) {
+        next = openInvestigation(next, {
+          issue: decision.suspectedIssue,
+          step,
+          hypothesis: decision.reason,
+          confidence: decision.confidence,
+          at,
+          targetElementId: decision.targetElementId ?? null,
+        });
+      }
+
+      // The keypress this decision asked for is evidence in the enquiry that
+      // asked for it.
+      if (params.executedAction !== null) {
+        next = recordInvestigationAttempt(next, {
+          action: params.executedAction,
+          step,
+          resultingFocus: next.currentFocus,
+          hypothesis: decision.reason,
+          confidence: decision.confidence,
+          at,
+        });
+      }
+
+      return investigationExhausted(next, this.#options.maxInvestigationSteps)
+        ? abandonInvestigation(next, { at, reason: "BUDGET_EXHAUSTED" })
+        : next;
+    }
+
+    if (current === null) return state;
+
+    if (decision.decision === "REPORT") {
+      return confirmInvestigation(state, { at, confidence: decision.confidence });
+    }
+
+    // CONTINUE or STOP: the agent has moved on.
+    return abandonInvestigation(state, {
+      at,
+      reason: decision.decision === "STOP" ? "RUN_ENDED" : "AGENT_MOVED_ON",
+    });
   }
 
   /**

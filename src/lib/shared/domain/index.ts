@@ -19,6 +19,7 @@ export * from "./evidence";
 export * from "./observation";
 export * from "./decision";
 export * from "./finding";
+export * from "./investigation";
 export * from "./graph";
 export * from "./step";
 export * from "./state";

@@ -8,6 +8,7 @@ import {
   type InteractiveElement,
 } from "./element";
 import { ConfirmedFindingSchema, SuspectedFindingSchema } from "./finding";
+import { InvestigationContextSchema, type InvestigationContext } from "./investigation";
 import { KeyboardActionRecordSchema, type KeyboardAction } from "./keyboard";
 import { AgentObservationSchema, type AgentObservation } from "./observation";
 import { EMPTY_NAVIGATION_GRAPH, NavigationGraphSchema } from "./graph";
@@ -89,6 +90,15 @@ export const AgentStateSchema = z.object({
   suspectedFindings: z.array(SuspectedFindingSchema).readonly(),
   confirmedFindings: z.array(ConfirmedFindingSchema).readonly(),
 
+  /**
+   * Lines of enquiry, open and closed.
+   *
+   * Closed ones are kept: an investigation that was abandoned says something
+   * about the page too, and a run that chased three suspicions and dropped
+   * them all is a different result from one that never noticed anything.
+   */
+  investigations: z.array(InvestigationContextSchema).readonly(),
+
   screenshots: z.array(ScreenshotEvidenceSchema).readonly(),
 
   /** Full per-step record: observation, decision, guard ruling, what executed. */
@@ -115,6 +125,7 @@ export function createInitialAgentState(params: {
     navigationGraph: EMPTY_NAVIGATION_GRAPH,
     suspectedFindings: [],
     confirmedFindings: [],
+    investigations: [],
     screenshots: [],
     steps: [],
   };
@@ -136,6 +147,22 @@ export function keyboardSequence(state: AgentState): readonly KeyboardAction[] {
 export function unreachedElements(state: AgentState): readonly InteractiveElement[] {
   const visited = new Set<string>(state.visitedElementIds);
   return state.discoveredElements.filter((element) => !visited.has(element.id));
+}
+
+/**
+ * The investigation currently being pursued, if any.
+ *
+ * At most one is open at a time — an agent chasing two questions at once is
+ * chasing neither, and the evidence for each would be interleaved with the
+ * other's keypresses.
+ */
+export function activeInvestigation(state: AgentState): InvestigationContext | null {
+  return state.investigations.find((each) => each.status === "OPEN") ?? null;
+}
+
+/** Whether the agent is gathering evidence or covering new ground. */
+export function agentMode(state: AgentState): "EXPLORING" | "INVESTIGATING" {
+  return activeInvestigation(state) === null ? "EXPLORING" : "INVESTIGATING";
 }
 
 /** True once the agent will take no further steps. */
