@@ -30,15 +30,23 @@ See [SECURITY.md](../SECURITY.md) §4 for the full handling rules.
 
 ### Required
 
-| Variable            | Description                                                                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ANTHROPIC_API_KEY` | Your own API key, used for the agent's decision step. Get one at [console.anthropic.com](https://console.anthropic.com/settings/keys). You pay for your own usage. |
+| Variable         | Description                                                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OPENAI_API_KEY` | Your own API key, used for the agent's decision step. Get one at [platform.openai.com](https://platform.openai.com/api-keys). You pay for your own usage. Without it the audit refuses to start. |
+
+If it is missing, the audit fails immediately with:
+
+> AI provider is not configured. Set OPENAI_API_KEY.
+
+There is no fallback. The tool will not substitute a mock provider and produce
+fabricated findings — a report nobody knows to distrust is worse than no report.
 
 ### AI
 
-| Variable   | Default         | Description                       |
-| ---------- | --------------- | --------------------------------- |
-| `AI_MODEL` | `claude-opus-5` | Model used for the decision step. |
+| Variable       | Default  | Description                                                                                        |
+| -------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `AI_PROVIDER`  | `openai` | Which provider to use. `openai` is the only supported value today; anything else fails at startup. |
+| `OPENAI_MODEL` | `gpt-4o` | Model for the decision step. Needs structured outputs, and vision to see screenshots.              |
 
 ### Agent limits
 

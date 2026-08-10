@@ -146,12 +146,27 @@ MVP. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 You bring your own AI API key.
 
+```bash
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-…
+OPENAI_MODEL=gpt-4o
+```
+
 - The key is read from the environment (or a local, git-ignored config file) by the
   Node-side agent process.
 - The key is **never** hard-coded.
 - The key is **never** sent to, injected into, or made reachable from the browser page
   under test.
 - No secret is ever committed.
+
+**If the key is missing, the audit fails immediately** with
+`AI provider is not configured. Set OPENAI_API_KEY.` There is no fallback: the tool
+will not quietly substitute a mock provider, because a report full of fabricated
+findings that looks real is worse than no report.
+
+The application depends on an `AIProvider` interface, not on a vendor. The OpenAI SDK
+is imported in exactly one file, and ESLint fails the build if anything else imports
+it — so adding a provider is a new file rather than a refactor.
 
 See [SECURITY.md](SECURITY.md) for the full handling rules.
 

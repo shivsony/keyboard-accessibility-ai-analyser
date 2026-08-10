@@ -17,8 +17,22 @@ const booleanish = z
   .transform((value) => value === "true" || value === "1");
 
 const envSchema = z.object({
-  ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
-  AI_MODEL: z.string().min(1).default("claude-opus-5"),
+  /**
+   * Which provider to use. One member today; the enum exists so an unsupported
+   * value fails here with a clear message rather than deeper in the run.
+   */
+  AI_PROVIDER: z.enum(["openai"]).default("openai"),
+
+  /**
+   * Deliberately optional here.
+   *
+   * A missing key is a configuration problem the AI layer reports in its own
+   * words ("AI provider is not configured. Set OPENAI_API_KEY."), and that
+   * message is more use than a generic schema error. Making it required would
+   * also mean the browser layer could not be exercised without a key.
+   */
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_MODEL: z.string().min(1).default("gpt-4o"),
 
   AGENT_MAX_STEPS: z.coerce.number().int().positive().max(1000).default(150),
   AGENT_SETTLE_MS: z.coerce.number().int().nonnegative().max(10_000).default(250),
