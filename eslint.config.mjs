@@ -4,27 +4,55 @@ import nextTs from "eslint-config-next/typescript";
 import prettier from "eslint-config-prettier/flat";
 
 /**
- * Server-only modules. These must never end up in a browser bundle: Playwright
- * drives a real browser and the AI client holds the user's API key.
- * See SECURITY.md.
+ * Import boundaries.
+ *
+ * Two vendor SDKs are confined to one directory each: Playwright drives a real
+ * browser, and the AI SDK holds the user's API key. Neither may end up in a
+ * browser bundle, and neither may spread through the codebase — the whole point
+ * of the driver and provider abstractions is that swapping them stays local.
+ * See SECURITY.md and ARCHITECTURE.md §2.
+ *
+ * Note on flat config: for a given file, the LAST matching block's value for a
+ * rule wins outright — values do not merge. So each block below restates the
+ * full set it wants, minus its own exception. Adding a block that only lists
+ * the new restriction would silently drop the others.
  */
-const SERVER_ONLY_IMPORTS = [
+
+const PLAYWRIGHT = [
   {
     name: "playwright",
-    message: "Playwright is server-only. Use it from src/lib/browser.",
+    message:
+      "Only src/lib/browser may import Playwright. Everything else goes through the browser driver.",
   },
   {
     name: "playwright-core",
-    message: "Playwright is server-only. Use it from src/lib/browser.",
+    message:
+      "Only src/lib/browser may import Playwright. Everything else goes through the browser driver.",
   },
+];
+
+const AI_SDK = [
+  {
+    name: "openai",
+    message:
+      "Only src/lib/ai/openai-provider.ts may import the OpenAI SDK. Everything else depends on the AIProvider interface.",
+  },
+];
+
+const CLIENT_FORBIDDEN = [
+  ...PLAYWRIGHT,
+  ...AI_SDK,
   {
     name: "@playwright/test",
     message: "@playwright/test belongs in tests/e2e only.",
   },
-  { name: "server-only", message: "server-only may only be imported by server modules." },
+  {
+    name: "server-only",
+    message: "server-only may only be imported by server modules.",
+  },
 ];
 
-const SERVER_ONLY_PATTERNS = [
+const CLIENT_FORBIDDEN_PATTERNS = [
   {
     group: ["@/lib/browser", "@/lib/browser/*", "@/lib/ai", "@/lib/ai/*"],
     message:
@@ -36,39 +64,37 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
 
-  // Client-side code must not reach server-only modules.
+  // Baseline for everything under src: no vendor SDKs.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: [...PLAYWRIGHT, ...AI_SDK] }],
+    },
+  },
+
+  // The browser driver may import Playwright, and only Playwright.
+  {
+    files: ["src/lib/browser/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: AI_SDK }],
+    },
+  },
+
+  // The OpenAI provider may import the OpenAI SDK, and only that.
+  {
+    files: ["src/lib/ai/openai-provider.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { paths: PLAYWRIGHT }],
+    },
+  },
+
+  // Client components may reach none of it. Last, so it wins for components.
   {
     files: ["src/components/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
-        { paths: SERVER_ONLY_IMPORTS, patterns: SERVER_ONLY_PATTERNS },
-      ],
-    },
-  },
-
-  // Playwright is the only module allowed to talk to a browser, and only from
-  // src/lib/browser and the e2e suite.
-  {
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/lib/browser/**"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [
-            {
-              name: "playwright",
-              message:
-                "Only src/lib/browser may import Playwright. Everything else goes through the browser driver.",
-            },
-            {
-              name: "playwright-core",
-              message:
-                "Only src/lib/browser may import Playwright. Everything else goes through the browser driver.",
-            },
-          ],
-        },
+        { paths: CLIENT_FORBIDDEN, patterns: CLIENT_FORBIDDEN_PATTERNS },
       ],
     },
   },

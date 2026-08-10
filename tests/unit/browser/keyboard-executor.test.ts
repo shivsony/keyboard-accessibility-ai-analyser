@@ -32,7 +32,7 @@ function makeTarget(
       calls.push(`press:${action}`);
       pressed.push(action);
     },
-    async captureFocus(_atStep: StepIndex) {
+    async captureFocus() {
       calls.push("captureFocus");
       const focus = focusSequence[Math.min(focusIndex, focusSequence.length - 1)];
       focusIndex += 1;
