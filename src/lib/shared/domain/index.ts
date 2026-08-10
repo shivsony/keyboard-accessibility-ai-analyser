@@ -15,6 +15,7 @@ export * from "./primitives";
 export * from "./keyboard";
 export * from "./element";
 export * from "./snapshot";
+export * from "./evidence";
 export * from "./observation";
 export * from "./decision";
 export * from "./finding";
