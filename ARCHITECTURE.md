@@ -199,44 +199,75 @@ ElementRef {
 
 ### 3.2 Decision
 
-A discriminated union on `decision`, so the illegal combinations are
+The structured output contract: the only channel from an untrusted model into
+the system. A discriminated union on `decision`, so the illegal combinations are
 unrepresentable rather than merely discouraged.
 
 ```
 AgentDecision =
   | { decision: "CONTINUE"
       action: KeyboardAction         // exactly one allowlisted action
-      reasoning: string
+      reason: string
       confidence: float              // 0.0 – 1.0
-      suspectedIssue: null           // CONTINUE makes no claim
-      targetElementId: ElementId | null }
+      targetElementId?: ElementId | null }
 
   | { decision: "INVESTIGATE"
       action: KeyboardAction
-      reasoning: string
+      reason: string
       confidence: float
-      suspectedIssue: FindingType    // required: a suspicion with no type
-      targetElementId: ElementId | null }   //   cannot be corroborated
+      suspectedIssue: {              // required: a hypothesis with no type
+        type: FindingType            //   cannot be corroborated
+        severity: Severity
+      }
+      targetElementId?: ElementId | null }
 
-  | { decision: "REPORT"
-      action: KeyboardAction
-      reasoning: string
+  | { decision: "REPORT"             // no action — reporting records a finding,
+      reason: string                 //   the next decision chooses where to go
       confidence: float
-      suspectedIssue: FindingType    // required
-      targetElementId: ElementId | null }
+      issue: {
+        type: FindingType
+        severity: Severity
+        title: string                // one line, as a bug report headline
+        description: string          // what is wrong, and who it affects
+      }
+      targetElementId?: ElementId | null }
 
-  | { decision: "STOP"
-      action: null                   // nothing is pressed once the run is over
-      reasoning: string
-      confidence: float
-      suspectedIssue: null
-      targetElementId: null }
+  | { decision: "STOP"               // nothing is pressed once the run is over
+      reason: string
+      confidence: float }
+```
+
+Examples:
+
+```json
+{ "decision": "CONTINUE", "action": "TAB",
+  "reason": "Continue exploring sequential keyboard navigation.",
+  "confidence": 0.94 }
+
+{ "decision": "INVESTIGATE", "action": "SHIFT_TAB",
+  "reason": "Focus appears to have skipped a visible interactive control.",
+  "confidence": 0.91,
+  "suspectedIssue": { "type": "SUSPICIOUS_FOCUS_ORDER", "severity": "HIGH" } }
+
+{ "decision": "REPORT",
+  "reason": "Two full traversals never focused this control.",
+  "confidence": 0.96,
+  "issue": { "type": "UNREACHABLE_ELEMENT", "severity": "HIGH",
+             "title": "…", "description": "…" } }
 ```
 
 Note what is absent: no selector, no URL, no script, no free-form command.
-`reasoning` is displayed and stored, never interpreted. Unknown fields are
-stripped at the parse boundary, so a response that invents one has nothing
-downstream to reach.
+`reason`, `title`, and `description` are displayed and stored, never
+interpreted, and are escaped where shown — the model may be quoting a page it
+does not control. Fields absent from a member are stripped at the parse
+boundary, so a `CONTINUE` arriving with an `issue` attached does not smuggle one
+through.
+
+**The browser executes nothing until a response passes this schema.** The order
+is enforced three times over: the provider parses before returning (`lib/ai`),
+the action guard validates before dispatching (`lib/agent`), and the executor
+re-checks the allowlist before pressing (`lib/browser`). A malformed response
+ends the step — it never falls back to a default action.
 
 ### 3.3 Finding
 
@@ -273,14 +304,14 @@ FindingEvidence {
 }
 
 FindingDetails =                      // the five findings are not one shape
-  | { type: "UNREACHABLE_INTERACTIVE_ELEMENT", elementId }
+  | { type: "UNREACHABLE_ELEMENT", elementId }
   | { type: "SUSPICIOUS_FOCUS_ORDER", observedOrder[], expectedOrder[] }
   | { type: "UNEXPECTED_FOCUS_LEAVING_PAGE", atStep, lastElementId }
   | { type: "SUSPICIOUS_FOCUS_CYCLE", cycleElementIds[], excludedElementIds[] }
   | { type: "NO_KEYBOARD_REACHABLE_CONTROLS", discoveredCount }
 
 FindingType =
-  | "UNREACHABLE_INTERACTIVE_ELEMENT"
+  | "UNREACHABLE_ELEMENT"
   | "SUSPICIOUS_FOCUS_ORDER"
   | "UNEXPECTED_FOCUS_LEAVING_PAGE"
   | "SUSPICIOUS_FOCUS_CYCLE"

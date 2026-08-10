@@ -7,6 +7,7 @@ import {
   mockStop,
   type AIProvider,
 } from "@/lib/ai";
+import { actionFor } from "@/lib/shared/domain";
 
 import { makeAnalysisInput } from "../../fixtures/ai";
 
@@ -26,8 +27,8 @@ describe("MockAIProvider", () => {
     });
 
     const input = makeAnalysisInput();
-    expect((await provider.analyzeObservation(input)).action).toBe("TAB");
-    expect((await provider.analyzeObservation(input)).action).toBe("SHIFT_TAB");
+    expect(actionFor(await provider.analyzeObservation(input))).toBe("TAB");
+    expect(actionFor(await provider.analyzeObservation(input))).toBe("SHIFT_TAB");
     expect((await provider.analyzeObservation(input)).decision).toBe("STOP");
   });
 
@@ -51,7 +52,7 @@ describe("MockAIProvider", () => {
 
     await provider.analyzeObservation(input);
 
-    expect((await provider.analyzeObservation(input)).action).toBe("SHIFT_TAB");
+    expect(actionFor(await provider.analyzeObservation(input))).toBe("SHIFT_TAB");
   });
 
   it("can fail on exhaustion, for tests about running out", async () => {
@@ -94,8 +95,8 @@ describe("MockAIProvider", () => {
     const first = await provider.analyzeObservation(input);
     const second = await provider.analyzeObservation(input);
 
-    expect(first.action).not.toBeNull();
-    expect(second.action).toBeNull();
-    expect(second.suspectedIssue).toBeNull();
+    expect(actionFor(first)).not.toBeNull();
+    expect(actionFor(second)).toBeNull();
+    expect(second).not.toHaveProperty("suspectedIssue");
   });
 });

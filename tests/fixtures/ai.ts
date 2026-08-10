@@ -40,8 +40,25 @@ export function makeAnalysisInput(
 export const RAW_CONTINUE = {
   decision: "CONTINUE",
   action: "TAB",
-  reasoning: "Still traversing the header.",
+  reason: "Still traversing the header.",
   confidence: 0.8,
   suspectedIssue: null,
+  issue: null,
+  targetElementId: null,
+};
+
+/** A valid REPORT, as the model would return it. */
+export const RAW_REPORT = {
+  decision: "REPORT",
+  action: null,
+  reason: "Two full traversals never focused this control.",
+  confidence: 0.96,
+  suspectedIssue: null,
+  issue: {
+    type: "UNREACHABLE_ELEMENT",
+    severity: "HIGH",
+    title: "Delete account button cannot be reached by keyboard",
+    description: "A div with role=button and no tabindex.",
+  },
   targetElementId: null,
 };

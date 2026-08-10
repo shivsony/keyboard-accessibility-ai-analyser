@@ -18,7 +18,7 @@ describe("system prompt", () => {
 
   it("names all five findings", () => {
     for (const finding of [
-      "UNREACHABLE_INTERACTIVE_ELEMENT",
+      "UNREACHABLE_ELEMENT",
       "SUSPICIOUS_FOCUS_ORDER",
       "UNEXPECTED_FOCUS_LEAVING_PAGE",
       "SUSPICIOUS_FOCUS_CYCLE",

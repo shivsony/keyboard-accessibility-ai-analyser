@@ -20,6 +20,7 @@ import type {
   InteractiveElement,
   KeyboardAction,
   NavigationGraph,
+  ReportedIssue,
   ScreenshotEvidence,
   Viewport,
 } from "@/lib/shared/domain";
@@ -131,12 +132,29 @@ export function makeDecision(overrides: Partial<AgentDecision> = {}): AgentDecis
   return {
     decision: "CONTINUE",
     action: "TAB",
-    reasoning: "Nothing notable; keep traversing.",
+    reason: "Nothing notable; keep traversing.",
     confidence: confidence(0.8),
-    suspectedIssue: null,
-    targetElementId: null,
     ...overrides,
   } as AgentDecision;
+}
+
+/** A REPORT decision carrying a full issue. */
+export function makeReportDecision(
+  overrides: Partial<ReportedIssue> = {},
+): AgentDecision {
+  return {
+    decision: "REPORT",
+    reason: "The traversal never reached this control.",
+    confidence: confidence(0.95),
+    issue: {
+      type: "UNREACHABLE_ELEMENT",
+      severity: "HIGH",
+      title: "Delete account button cannot be reached by keyboard",
+      description:
+        "The control is a div with role=button and no tabindex, so Tab never lands on it.",
+      ...overrides,
+    },
+  };
 }
 
 export function makeStep(
@@ -151,11 +169,8 @@ export function makeStep(
       action === null
         ? {
             decision: "STOP",
-            action: null,
-            reasoning: "Traversal complete.",
+            reason: "Traversal complete.",
             confidence: confidence(0.9),
-            suspectedIssue: null,
-            targetElementId: null,
           }
         : makeDecision({ action }),
     guardVerdict:
@@ -187,7 +202,7 @@ export function makeConfirmedFinding(
     id: findingId(id),
     status: "CONFIRMED",
     details: {
-      type: "UNREACHABLE_INTERACTIVE_ELEMENT",
+      type: "UNREACHABLE_ELEMENT",
       elementId: elementId("a"),
     },
     reasoning: "Tab traversal cycled without ever focusing this control.",
