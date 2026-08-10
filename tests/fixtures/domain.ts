@@ -60,6 +60,7 @@ export function makeElement(
     role: "button",
     accessibleName: `Element ${id}`,
     selector: `#${id}`,
+    frame: { url: TEST_URL, name: null, isMainFrame: true },
     tabIndex: 0,
     disabled: false,
     visible: true,
@@ -84,23 +85,7 @@ export function makeAriaSnapshot(
   overrides: Partial<AccessibilitySnapshot> = {},
 ): AccessibilitySnapshot {
   return {
-    root: {
-      role: "main",
-      name: null,
-      value: null,
-      focused: false,
-      disabled: false,
-      children: [
-        {
-          role: "button",
-          name: "A",
-          value: null,
-          focused: true,
-          disabled: false,
-          children: [],
-        },
-      ],
-    },
+    snapshot: '- main:\n  - button "A" [ref=e1] [focused]',
     nodeCount: 2,
     truncated: false,
     capturedAt: at(0),

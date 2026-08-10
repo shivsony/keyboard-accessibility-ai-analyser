@@ -2,6 +2,14 @@ import { z } from "zod";
 
 import { BoundingBoxSchema, ElementIdSchema, StepIndexSchema } from "./primitives";
 
+/** Frame containing the element. Selectors are scoped to this frame. */
+export const FrameInfoSchema = z.object({
+  url: z.string(),
+  name: z.string().nullable(),
+  isMainFrame: z.boolean(),
+});
+export type FrameInfo = z.infer<typeof FrameInfoSchema>;
+
 /** Why the element was treated as interactive. Useful when a finding is disputed. */
 export const ElementDiscoverySourceSchema = z.enum([
   /** button, a[href], input, select, textarea, summary, … */
@@ -32,6 +40,8 @@ export const InteractiveElementSchema = z.object({
   role: z.string().nullable(),
   accessibleName: z.string().nullable(),
   selector: z.string().min(1),
+  /** The frame in which `selector` is meaningful. */
+  frame: FrameInfoSchema,
   tabIndex: z.number().int().nullable(),
   disabled: z.boolean(),
   visible: z.boolean(),
