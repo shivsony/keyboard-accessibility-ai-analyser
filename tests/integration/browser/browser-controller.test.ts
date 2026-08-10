@@ -380,37 +380,20 @@ describe("observation", () => {
       const page = await browser.open(url("well-behaved.html"));
       const aria = await page.captureAccessibility();
 
-      expect(aria.root).not.toBeNull();
       expect(aria.nodeCount).toBeGreaterThan(1);
-
-      const roles: string[] = [];
-      const names: string[] = [];
-      const walk = (node: NonNullable<typeof aria.root>): void => {
-        roles.push(node.role);
-        if (node.name !== null) names.push(node.name);
-        node.children.forEach(walk);
-      };
-      if (aria.root !== null) walk(aria.root);
-
-      expect(roles).toContain("button");
-      expect(names).toContain("First");
+      expect(aria.snapshot).toContain('button "First"');
+      expect(aria.snapshot).toMatch(/\[ref=e\d+\]/);
     });
   }, 60_000);
 
-  it("reports which element the accessibility tree considers focused", async () => {
+  it("reports the focused element in the AI-oriented ARIA snapshot", async () => {
     await withBrowserSession(options(), async (browser) => {
       const page = await browser.open(url("well-behaved.html"));
       await page.press("TAB");
 
       const aria = await page.captureAccessibility();
-      const focused: string[] = [];
-      const walk = (node: NonNullable<typeof aria.root>): void => {
-        if (node.focused && node.name !== null) focused.push(node.name);
-        node.children.forEach(walk);
-      };
-      if (aria.root !== null) walk(aria.root);
-
-      expect(focused).toContain("First");
+      expect(aria.snapshot).toContain('button "First"');
+      expect(aria.snapshot).toContain("[active]");
     });
   }, 60_000);
 
@@ -423,6 +406,36 @@ describe("observation", () => {
       expect(shot.png.byteLength).toBeGreaterThan(0);
       // PNG magic number, so a truncated or misconfigured capture is caught.
       expect([...shot.png.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    });
+  }, 60_000);
+
+  it("captures a complete descriptive observation after every browser state", async () => {
+    await withBrowserSession(options(), async (browser) => {
+      const page = await browser.open(url("well-behaved.html"));
+      const initial = await page.observe(0);
+
+      expect(initial.observation.step).toBe(0);
+      expect(initial.observation.url).toBe(server.url("well-behaved.html"));
+      expect(initial.observation.screenshotId).toBe("observation-0");
+      expect(initial.screenshot.png.byteLength).toBeGreaterThan(0);
+      expect(initial.observation.dom.summary).toContain("button");
+      expect(initial.observation.aria.snapshot).toMatch(/\[ref=e\d+\]/);
+      expect(
+        initial.observation.interactiveElements.map((element) => element.tagName).sort(),
+      ).toEqual(["a", "button", "input"]);
+      expect(initial.observation.viewport).toEqual(VIEWPORT);
+      expect(Date.parse(initial.observation.timestamp)).not.toBeNaN();
+
+      await page.press("TAB");
+      const afterTab = await page.observe(1);
+      expect(afterTab.observation.focus).toMatchObject({
+        kind: "ELEMENT",
+        element: {
+          tagName: "button",
+          accessibleName: "First",
+          frame: { url: server.url("well-behaved.html"), name: null, isMainFrame: true },
+        },
+      });
     });
   }, 60_000);
 });

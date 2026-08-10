@@ -64,10 +64,10 @@ describe("AgentObservation", () => {
     expect(observation.dom.nodeCount).toBe(5000);
   });
 
-  it("accepts a nested accessibility tree", () => {
+  it("retains the AI-oriented Playwright ARIA snapshot", () => {
     const observation = AgentObservationSchema.parse(makeObservation(0));
 
-    expect(observation.aria.root?.children[0]?.role).toBe("button");
+    expect(observation.aria.snapshot).toContain("[ref=e1]");
   });
 });
 

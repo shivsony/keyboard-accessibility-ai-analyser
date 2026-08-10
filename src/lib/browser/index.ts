@@ -13,4 +13,5 @@ export * from "./types";
 export * from "./errors";
 export * from "./keys";
 export { Deadline, withTimeout } from "./deadline";
+export { ObservationEngine } from "./observation-engine";
 export { PlaywrightBrowserController, withBrowserSession } from "./playwright-controller";

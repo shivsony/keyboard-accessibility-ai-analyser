@@ -25,34 +25,15 @@ export const DOMSnapshotSchema = z.object({
 export type DOMSnapshot = z.infer<typeof DOMSnapshotSchema>;
 
 /**
- * A node in the accessibility tree.
+ * The ARIA view of the page, as emitted by Playwright's `ariaSnapshot()`.
  *
- * Recursive, so the schema needs an explicit type annotation — TypeScript
- * cannot infer a type that refers to itself.
+ * This deliberately preserves Playwright's YAML instead of reverse-engineering
+ * it into a lossy local tree. `mode: "ai"` includes stable-in-snapshot element
+ * references and iframe contents, both useful to a model reasoning about the
+ * current browser state. It is evidence, not an accessibility verdict.
  */
-export type AccessibilityNode = {
-  role: string;
-  name: string | null;
-  value: string | null;
-  focused: boolean;
-  disabled: boolean;
-  children: readonly AccessibilityNode[];
-};
-
-export const AccessibilityNodeSchema: z.ZodType<AccessibilityNode> = z.lazy(() =>
-  z.object({
-    role: z.string(),
-    name: z.string().nullable(),
-    value: z.string().nullable(),
-    focused: z.boolean(),
-    disabled: z.boolean(),
-    children: z.array(AccessibilityNodeSchema).readonly(),
-  }),
-);
-
-/** The ARIA view of the page: what assistive technology would be told exists. */
 export const AccessibilitySnapshotSchema = z.object({
-  root: AccessibilityNodeSchema.nullable(),
+  snapshot: z.string(),
   nodeCount: z.number().int().nonnegative(),
   truncated: z.boolean(),
   capturedAt: TimestampSchema,

@@ -5,9 +5,9 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import {
   elementId,
   UrlSchema,
-  type AccessibilityNode,
   type AccessibilitySnapshot,
   type DOMSnapshot,
+  type FrameInfo,
   type FocusState,
   type InteractiveElement,
   type KeyboardAction,
@@ -19,6 +19,7 @@ import {
 import { Deadline, withTimeout } from "./deadline";
 import { BrowserCleanupError, BrowserLayerError, isTimeoutLike } from "./errors";
 import { keyForAction } from "./keys";
+import { ObservationEngine } from "./observation-engine";
 import {
   collectInteractiveElements,
   readFocus,
@@ -33,24 +34,6 @@ import type {
 } from "./types";
 
 const now = (): string => new Date().toISOString();
-
-/**
- * A node from Chrome DevTools Protocol's `Accessibility.getFullAXTree`.
- *
- * Playwright removed `page.accessibility` in 1.55, and `ariaSnapshot()` returns
- * YAML rather than a tree. CDP gives the same data the old API exposed, in the
- * shape the domain model already uses. Chromium-only is not a constraint here —
- * this layer launches Chromium.
- */
-type CdpAxNode = {
-  nodeId: string;
-  ignored?: boolean;
-  role?: { value?: string };
-  name?: { value?: string };
-  value?: { value?: string | number };
-  properties?: { name: string; value?: { value?: unknown } }[];
-  childIds?: string[];
-};
 
 // ---------------------------------------------------------------------------
 // Page
@@ -177,31 +160,24 @@ class PlaywrightPageController implements PageController {
   async captureAccessibility(): Promise<AccessibilitySnapshot> {
     this.#assertUsable();
 
-    const session = await this.#run(
-      this.#page.context().newCDPSession(this.#page),
-      "open a CDP session",
+    const snapshot = await this.#run(
+      this.#page.ariaSnapshot({
+        boxes: true,
+        mode: "ai",
+        timeout: this.#screenshotTimeout(),
+      }),
+      "read the accessibility snapshot",
       this.#options.navigationTimeoutMs,
     );
 
-    try {
-      await this.#run(
-        session.send("Accessibility.enable"),
-        "enable the accessibility tree",
-        this.#options.navigationTimeoutMs,
-      );
-
-      const response = (await this.#run(
-        session.send("Accessibility.getFullAXTree"),
-        "read the accessibility tree",
-        this.#options.navigationTimeoutMs,
-      )) as unknown as { nodes?: CdpAxNode[] };
-
-      return buildAccessibilitySnapshot(response.nodes ?? []);
-    } finally {
-      // Detaching is best-effort: the session dies with the page anyway, and a
-      // failure here must not mask a real observation error.
-      await session.detach().catch(() => undefined);
-    }
+    return {
+      snapshot,
+      // Every non-empty line describes one ARIA node in Playwright's YAML.
+      // It is intentionally an estimate: the snapshot itself is authoritative.
+      nodeCount: snapshot === "" ? 0 : snapshot.split("\n").filter(Boolean).length,
+      truncated: false,
+      capturedAt: now(),
+    };
   }
 
   async captureFocus(atStep: StepIndex): Promise<FocusState> {
@@ -216,7 +192,10 @@ class PlaywrightPageController implements PageController {
     if (raw.kind === "BODY") return { kind: "BODY" };
     if (raw.kind === "OUTSIDE_PAGE") return { kind: "OUTSIDE_PAGE" };
 
-    return { kind: "ELEMENT", element: toInteractiveElement(raw.element, atStep) };
+    return {
+      kind: "ELEMENT",
+      element: toInteractiveElement(raw.element, atStep, this.#frameInfo()),
+    };
   }
 
   async captureInteractiveElements(
@@ -230,7 +209,20 @@ class PlaywrightPageController implements PageController {
       this.#options.navigationTimeoutMs,
     );
 
-    return raw.map((element) => toInteractiveElement(element, atStep));
+    return raw.map((element) => toInteractiveElement(element, atStep, this.#frameInfo()));
+  }
+
+  async observe(atStep: StepIndex) {
+    this.#assertUsable();
+    return new ObservationEngine(this).observe(atStep);
+  }
+
+  #frameInfo(): FrameInfo {
+    return {
+      url: this.#page.mainFrame().url(),
+      name: this.#page.mainFrame().name() || null,
+      isMainFrame: true,
+    };
   }
 
   #screenshotTimeout(): number {
@@ -283,62 +275,18 @@ class PlaywrightPageController implements PageController {
   }
 }
 
-/**
- * Rebuilds the CDP flat node list into the domain's accessibility tree.
- *
- * CDP returns nodes plus `childIds`, so the tree is reassembled here. The
- * `visited` set is not defensive tidiness: a malformed or cyclic tree from a
- * hostile page would otherwise recurse until the stack gives out.
- */
-function buildAccessibilitySnapshot(nodes: readonly CdpAxNode[]): AccessibilitySnapshot {
-  const byId = new Map<string, CdpAxNode>();
-  for (const node of nodes) byId.set(node.nodeId, node);
-
-  let nodeCount = 0;
-  const visited = new Set<string>();
-
-  const propertyOf = (node: CdpAxNode, name: string): boolean =>
-    node.properties?.some(
-      (property) => property.name === name && property.value?.value === true,
-    ) === true;
-
-  const convert = (node: CdpAxNode): AccessibilityNode => {
-    nodeCount += 1;
-    visited.add(node.nodeId);
-
-    const children: AccessibilityNode[] = [];
-    for (const childId of node.childIds ?? []) {
-      if (visited.has(childId)) continue;
-      const child = byId.get(childId);
-      if (child !== undefined) children.push(convert(child));
-    }
-
-    const name = node.name?.value;
-    const value = node.value?.value;
-
-    return {
-      role: node.role?.value ?? "unknown",
-      name: name === undefined || name === "" ? null : name,
-      value: value === undefined ? null : String(value),
-      focused: propertyOf(node, "focused"),
-      disabled: propertyOf(node, "disabled"),
-      children,
-    };
-  };
-
-  const first = nodes[0];
-  const root = first === undefined ? null : convert(first);
-
-  return { root, nodeCount, truncated: false, capturedAt: now() };
-}
-
-function toInteractiveElement(raw: RawElement, atStep: StepIndex): InteractiveElement {
+function toInteractiveElement(
+  raw: RawElement,
+  atStep: StepIndex,
+  frame: FrameInfo,
+): InteractiveElement {
   return {
     id: elementId(raw.path),
     tagName: raw.tagName,
     role: raw.role,
     accessibleName: raw.accessibleName,
     selector: raw.path,
+    frame,
     tabIndex: raw.tabIndex,
     disabled: raw.disabled,
     visible: raw.visible,

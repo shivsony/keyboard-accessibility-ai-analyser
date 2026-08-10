@@ -1,5 +1,6 @@
 import type {
   AccessibilitySnapshot,
+  AgentObservation,
   DOMSnapshot,
   FocusState,
   InteractiveElement,
@@ -28,6 +29,12 @@ export type ScreenshotCapture = {
   readonly png: Uint8Array;
   readonly viewport: Viewport;
   readonly capturedAt: Timestamp;
+};
+
+/** An observation plus the screenshot bytes the evidence layer must persist. */
+export type ObservationCapture = {
+  readonly observation: AgentObservation;
+  readonly screenshot: ScreenshotCapture;
 };
 
 export type BrowserSessionOptions = {
@@ -81,6 +88,9 @@ export interface PageController {
   captureFocus(atStep: StepIndex): Promise<FocusState>;
 
   captureInteractiveElements(atStep: StepIndex): Promise<readonly InteractiveElement[]>;
+
+  /** Captures every descriptive signal for the current browser state. */
+  observe(atStep: StepIndex): Promise<ObservationCapture>;
 
   readonly isUsable: boolean;
 }
