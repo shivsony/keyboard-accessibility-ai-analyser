@@ -10,6 +10,11 @@ import { makeElement, makeObservation, TEST_AUDIT_ID, TEST_URL } from "./domain"
  * pressed — because an input with no history exercises none of the branches
  * that make the prompt worth building.
  */
+/** PNG magic number plus a few bytes. Enough to pass validation. */
+export const TINY_PNG = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02,
+]);
+
 export function makeAnalysisInput(
   overrides: Partial<AgentAnalysisInput> = {},
 ): AgentAnalysisInput {
@@ -30,7 +35,9 @@ export function makeAnalysisInput(
     keyboardHistory: [{ step: 0, action: "TAB", at: "2026-08-10T12:00:00.000Z" }],
     navigationSummary: "Logo --TAB--> Search",
     suspectedFindings: [],
-    screenshot: null,
+    // A valid, if tiny, PNG. The realistic default: every observation carries a
+    // screenshot, and a provider in `required` mode fails the step without one.
+    screenshot: TINY_PNG,
     stepsRemaining: 149,
     ...overrides,
   };

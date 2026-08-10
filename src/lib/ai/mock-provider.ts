@@ -24,6 +24,11 @@ import { AIProviderError, type AgentAnalysisInput, type AIProvider } from "./typ
 
 export type MockAIProviderOptions = {
   /**
+   * What the mock claims about seeing the page. Defaults to true, matching the
+   * real provider, so a test does not accidentally exercise a text-only path.
+   */
+  readonly multimodal?: boolean;
+  /**
    * Decisions to return, in order.
    *
    * When exhausted, the behaviour of `whenExhausted` applies.
@@ -89,6 +94,7 @@ export function mockStop(): AgentDecision {
 export class MockAIProvider implements AIProvider {
   readonly name = "mock";
   readonly model = "mock";
+  readonly multimodal: boolean;
 
   #options: MockAIProviderOptions;
   #index = 0;
@@ -98,6 +104,12 @@ export class MockAIProvider implements AIProvider {
 
   constructor(options: MockAIProviderOptions = {}) {
     this.#options = options;
+    this.multimodal = options.multimodal ?? true;
+  }
+
+  /** Steps where a screenshot actually arrived. */
+  get screenshotsReceived(): number {
+    return this.received.filter((input) => input.screenshot !== null).length;
   }
 
   /** How many decisions have been requested. */

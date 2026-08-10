@@ -98,7 +98,7 @@ describe("user prompt", () => {
       }),
     );
 
-    expect(prompt).toContain("HYPOTHESES YOU ARE STILL TESTING");
+    expect(prompt).toContain("PREVIOUS FINDINGS");
     expect(prompt).toContain("SUSPICIOUS_FOCUS_CYCLE");
   });
 

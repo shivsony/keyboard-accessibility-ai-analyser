@@ -156,6 +156,9 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
   const history = input.keyboardHistory.slice(-MAX_HISTORY_LISTED);
 
   const sections: string[] = [
+    `AUDIT GOAL: determine whether a keyboard-only user can reach and operate`,
+    `every interactive control on this page, and record any place they cannot.`,
+    ``,
     `STEP ${input.step} of this audit. ${input.stepsRemaining} steps remain in the budget.`,
     `URL: ${input.url}`,
     ``,
@@ -197,16 +200,19 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
     );
   }
 
-  if (input.suspectedFindings.length > 0) {
-    sections.push(
-      ``,
-      `HYPOTHESES YOU ARE STILL TESTING:`,
-      ...input.suspectedFindings.map(
-        (finding) =>
-          `  - ${finding.details.type} (confidence ${finding.confidence}): ${finding.reasoning}`,
-      ),
-    );
-  }
+  // Always rendered, even when empty: "no hypotheses open" is information the
+  // model needs, and a section that appears only sometimes is easy to overlook
+  // when it finally does.
+  sections.push(
+    ``,
+    `PREVIOUS FINDINGS — hypotheses you are still testing:`,
+    ...(input.suspectedFindings.length === 0
+      ? ["  (none raised yet)"]
+      : input.suspectedFindings.map(
+          (finding) =>
+            `  - ${finding.details.type} (confidence ${finding.confidence}): ${finding.reasoning}`,
+        )),
+  );
 
   sections.push(
     ``,
@@ -219,6 +225,12 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
       input.observation.dom.truncated ? ", TRUNCATED" : ""
     }):`,
     input.observation.dom.summary.slice(0, 4000),
+    ``,
+    input.screenshot === null
+      ? `NO SCREENSHOT was submitted for this step. Reason from the state above.`
+      : `A SCREENSHOT of the current viewport is attached. Use it for visual` +
+          ` context — layout and reading order — but treat the focus reported` +
+          ` above as the source of truth.`,
     ``,
     `Decide what to do next.`,
   );

@@ -361,6 +361,7 @@ describe("stop conditions", () => {
     const provider: AIProvider = {
       name: "failing",
       model: "failing",
+      multimodal: true,
       analyzeObservation: async () => {
         throw new AIProviderError("REQUEST_FAILED", "provider unreachable");
       },
@@ -377,6 +378,7 @@ describe("stop conditions", () => {
     const provider: AIProvider = {
       name: "invalid",
       model: "invalid",
+      multimodal: true,
       analyzeObservation: async () => {
         throw new AIProviderError("INVALID_RESPONSE", "no valid decision");
       },
@@ -393,6 +395,7 @@ describe("stop conditions", () => {
     const provider: AIProvider = {
       name: "rogue",
       model: "rogue",
+      multimodal: true,
       analyzeObservation: async () =>
         ({
           decision: "CONTINUE",
@@ -459,6 +462,52 @@ describe("stop conditions", () => {
     });
 
     expect(result.terminationReason).toBe("CANCELLED");
+  }, 60_000);
+});
+
+describe("multimodal input", () => {
+  // The loop's job here: real screenshot bytes, from the real browser, reaching
+  // the provider on every step. A run whose model never saw the page would look
+  // identical from the outside.
+  it("sends a real screenshot with every decision", async () => {
+    const provider = new MockAIProvider({
+      script: [mockContinue("TAB"), mockContinue("TAB"), mockStop()],
+    });
+
+    const result = await explore("well-behaved.html", provider);
+
+    expect(provider.callCount).toBe(3);
+    expect(provider.screenshotsReceived).toBe(3);
+    expect(result.terminationReason).toBe("AGENT_STOPPED");
+  }, 60_000);
+
+  it("sends PNG bytes, not a placeholder", async () => {
+    const provider = new MockAIProvider({ script: [mockStop()] });
+
+    await explore("well-behaved.html", provider);
+
+    const screenshot = provider.received[0]?.screenshot;
+
+    expect(screenshot).not.toBeNull();
+    expect([...(screenshot ?? []).slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect((screenshot ?? []).length).toBeGreaterThan(1_000);
+  }, 60_000);
+
+  // Each step must carry the screenshot of the state it is deciding from, not
+  // a stale one from earlier in the run.
+  it("sends a fresh screenshot as the page changes", async () => {
+    const provider = new MockAIProvider({
+      script: [mockContinue("TAB"), mockContinue("TAB"), mockStop()],
+    });
+
+    await explore("well-behaved.html", provider);
+
+    const shots = provider.received.map((input) => input.screenshot);
+
+    expect(shots).toHaveLength(3);
+    // Focus rings differ between steps, so identical bytes would mean the
+    // screenshot was captured once and reused.
+    expect(Buffer.from(shots[0] ?? [])).not.toEqual(Buffer.from(shots[1] ?? []));
   }, 60_000);
 });
 

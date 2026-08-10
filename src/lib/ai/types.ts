@@ -70,6 +70,15 @@ export interface AIProvider {
   readonly name: string;
   /** The model in use, for the run record. */
   readonly model: string;
+  /**
+   * Whether the agent actually sees the page.
+   *
+   * On the interface rather than hidden in an implementation, because a report
+   * should be readable differently depending on the answer: an agent working
+   * from the accessibility tree alone cannot notice that a control is visually
+   * first but focused last.
+   */
+  readonly multimodal: boolean;
 
   /**
    * Returns a validated decision, or throws.
@@ -96,6 +105,14 @@ export const AI_ERROR_CODES = Object.freeze([
   "REQUEST_FAILED",
   /** The response did not parse into a valid decision, after retries. */
   "INVALID_RESPONSE",
+  /**
+   * The screenshot could not be submitted.
+   *
+   * Its own code because the remedy differs: the run is not multimodal any
+   * more, and continuing text-only would quietly change what the agent is
+   * capable of noticing.
+   */
+  "IMAGE_SUBMISSION_FAILED",
   /** The caller aborted. */
   "CANCELLED",
 ] as const);
