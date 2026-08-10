@@ -90,6 +90,15 @@ export class ExplorationAgent {
   #options: ExplorationOptions;
   #now: () => number;
 
+  /**
+   * Bytes of the most recent screenshot.
+   *
+   * Held here rather than in `AgentState` because state is serialized into the
+   * run record, and a megabyte of base64 per step would make it unreadable.
+   * The state keeps the reference; this keeps the pixels for the next request.
+   */
+  #latestScreenshot: Uint8Array | null = null;
+
   constructor(dependencies: ExplorationDependencies, options: ExplorationOptions) {
     if (!Number.isInteger(options.maxSteps) || options.maxSteps <= 0) {
       throw new Error("maxSteps must be a positive integer");
@@ -219,6 +228,7 @@ export class ExplorationAgent {
           format: "png",
         });
         state = applyObservation(state, observation);
+        this.#latestScreenshot = executed.observation.screenshot.png;
         state = applyTransition(state, {
           from: before,
           to: executed.newFocus,
@@ -356,6 +366,7 @@ export class ExplorationAgent {
     });
 
     next = applyObservation(next, capture.observation);
+    this.#latestScreenshot = capture.screenshot.png;
     return next;
   }
 
@@ -380,7 +391,9 @@ export class ExplorationAgent {
       keyboardHistory: state.keyboardHistory,
       navigationSummary: describePath(traversalPath(state.navigationGraph)),
       suspectedFindings: state.suspectedFindings,
-      screenshot: null,
+      // The image input. Without it the provider fails the step rather than
+      // quietly reasoning from text alone.
+      screenshot: this.#latestScreenshot,
       stepsRemaining: Math.max(0, this.#options.maxSteps - state.currentStep),
     };
   }

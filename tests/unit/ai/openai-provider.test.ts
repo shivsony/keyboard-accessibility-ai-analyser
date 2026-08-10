@@ -128,7 +128,7 @@ describe("analyzeObservation", () => {
       apiKey: KEY,
       model: "gpt-4o",
       client,
-      sendScreenshot: false,
+      imageMode: "text-only",
     });
 
     await subject.analyzeObservation(

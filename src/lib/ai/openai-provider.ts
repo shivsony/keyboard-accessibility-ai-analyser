@@ -52,13 +52,28 @@ export type OpenAIChatClient = {
   };
 };
 
+/**
+ * Whether the model is sent the screenshot.
+ *
+ * - `required` — every step submits the current screenshot. A screenshot that
+ *   is missing, malformed, or rejected fails the step. The agent either sees
+ *   the page or says it could not.
+ * - `text-only` — a deliberate choice for a model without vision. The run
+ *   records `multimodal: false`, so nobody reads its findings as if the agent
+ *   had been looking at the page.
+ *
+ * There is no third mode that drops the image and carries on, because that is
+ * the one that produces a report which looks multimodal and is not.
+ */
+export type ImageMode = "required" | "text-only";
+
 export type OpenAIProviderOptions = {
   readonly apiKey: string;
   readonly model: string;
   /** Bounded retries when the response does not parse into a valid decision. */
   readonly maxRetries?: number;
-  /** Send the screenshot. Off for models without vision. */
-  readonly sendScreenshot?: boolean;
+  /** Defaults to `required`. */
+  readonly imageMode?: ImageMode;
   /** Injected in tests. Never set in production. */
   readonly client?: OpenAIChatClient;
 };
@@ -66,13 +81,41 @@ export type OpenAIProviderOptions = {
 const DEFAULT_MAX_RETRIES = 2;
 const MAX_COMPLETION_TOKENS = 1024;
 
+/**
+ * Ceiling on the encoded image.
+ *
+ * Base64 inflates by about a third, and providers reject oversized payloads
+ * with errors that are easy to misread as something else. Catching it here
+ * produces a message that names the real problem.
+ */
+const MAX_SCREENSHOT_BYTES = 15 * 1024 * 1024;
+
+/** PNG magic number. A truncated capture is caught before it costs a request. */
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47] as const;
+
+/**
+ * Whether a provider error is about the image we attached.
+ *
+ * Matched on wording because the SDK does not distinguish these structurally.
+ * Deliberately narrow: a false positive costs one wasted retry, while a false
+ * negative merely reports the failure under a more general code. Neither
+ * outcome drops the screenshot, which is the thing that must not happen.
+ */
+function looksImageRelated(message: string): boolean {
+  return /\b(image|screenshot|vision|multimodal|image_url|unsupported[_ ]image|invalid[_ ]image|download.*image)\b/i.test(
+    message,
+  );
+}
+
 export class OpenAIProvider implements AIProvider {
   readonly name = "openai";
   readonly model: string;
 
+  readonly multimodal: boolean;
+
   #client: OpenAIChatClient;
   #maxRetries: number;
-  #sendScreenshot: boolean;
+  #imageMode: ImageMode;
 
   constructor(options: OpenAIProviderOptions) {
     // Belt and braces: the factory checks configuration first, but a provider
@@ -84,7 +127,8 @@ export class OpenAIProvider implements AIProvider {
 
     this.model = options.model;
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
-    this.#sendScreenshot = options.sendScreenshot ?? true;
+    this.#imageMode = options.imageMode ?? "required";
+    this.multimodal = this.#imageMode === "required";
     // The cast is the price of not leaking SDK types across this boundary.
     // `OpenAIChatClient` is the contract this file depends on; the SDK's own
     // signatures are richer (overloads for streaming, exact message unions) and
@@ -98,6 +142,9 @@ export class OpenAIProvider implements AIProvider {
     input: AgentAnalysisInput,
     options: AnalyzeOptions = {},
   ): Promise<AgentDecision> {
+    // Built once, before any request. A screenshot problem is a configuration
+    // or capture problem, and finding out about it after three retries would
+    // waste the budget and bury the cause.
     const messages = this.#buildMessages(input);
     const problems: string[] = [];
 
@@ -122,7 +169,11 @@ export class OpenAIProvider implements AIProvider {
     );
   }
 
-  async #request(messages: unknown[], options: AnalyzeOptions): Promise<string> {
+  async #request(
+    messages: unknown[],
+    options: AnalyzeOptions,
+    retriedImage = false,
+  ): Promise<string> {
     try {
       const response = await this.#client.chat.completions.create(
         {
@@ -149,11 +200,28 @@ export class OpenAIProvider implements AIProvider {
         });
       }
 
+      const message = safeErrorMessage(error);
+
+      // An image-related rejection gets exactly one retry, and only when the
+      // provider's own wording suggests a transient handling problem rather
+      // than a permanent one. The retry sends the *same* image: retrying
+      // without it would be the silent downgrade this class refuses to make.
+      if (looksImageRelated(message)) {
+        if (!retriedImage) {
+          return this.#request(messages, options, true);
+        }
+
+        throw new AIProviderError(
+          "IMAGE_SUBMISSION_FAILED",
+          `The screenshot could not be submitted to the model, and the retry failed too: ${message}. The step is not multimodal, so it has been failed rather than retried without the image.`,
+        );
+      }
+
       // Scrubbed, not passed through: SDK errors routinely echo request
       // headers, and this message ends up in logs and bug reports.
       throw new AIProviderError(
         "REQUEST_FAILED",
-        `The OpenAI request failed: ${safeErrorMessage(error)}`,
+        `The OpenAI request failed: ${message}`,
       );
     }
   }
@@ -192,16 +260,14 @@ export class OpenAIProvider implements AIProvider {
   }
 
   #buildMessages(input: AgentAnalysisInput): unknown[] {
-    const text = buildUserPrompt(input);
+    const content: unknown[] = [{ type: "text", text: buildUserPrompt(input) }];
 
-    const content: unknown[] = [{ type: "text", text }];
-
-    if (this.#sendScreenshot && input.screenshot !== null) {
+    if (this.#imageMode === "required") {
       content.push({
         type: "image_url",
-        image_url: {
-          url: `data:image/png;base64,${Buffer.from(input.screenshot).toString("base64")}`,
-        },
+        // Encoded here and sent from Node. The image never passes through the
+        // browser, and neither does the key that authorises the request.
+        image_url: { url: this.#encodeScreenshot(input.screenshot) },
       });
     }
 
@@ -209,5 +275,44 @@ export class OpenAIProvider implements AIProvider {
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content },
     ];
+  }
+
+  /**
+   * Turns the screenshot into a data URL, or fails loudly.
+   *
+   * Every failure here throws. Dropping the image and continuing would leave a
+   * run that reports as multimodal while the agent was reasoning from text — the
+   * findings would look the same and mean less.
+   */
+  #encodeScreenshot(screenshot: Uint8Array | null): string {
+    if (screenshot === null) {
+      throw new AIProviderError(
+        "IMAGE_SUBMISSION_FAILED",
+        "No screenshot was supplied for this step, and the provider is configured to require one. Capture one, or configure imageMode: 'text-only' deliberately.",
+      );
+    }
+
+    if (screenshot.byteLength === 0) {
+      throw new AIProviderError(
+        "IMAGE_SUBMISSION_FAILED",
+        "The screenshot for this step was empty",
+      );
+    }
+
+    if (!PNG_SIGNATURE.every((byte, index) => screenshot[index] === byte)) {
+      throw new AIProviderError(
+        "IMAGE_SUBMISSION_FAILED",
+        "The screenshot for this step is not a PNG; the capture is probably truncated",
+      );
+    }
+
+    if (screenshot.byteLength > MAX_SCREENSHOT_BYTES) {
+      throw new AIProviderError(
+        "IMAGE_SUBMISSION_FAILED",
+        `The screenshot for this step is ${Math.round(screenshot.byteLength / 1024)}KB, over the ${Math.round(MAX_SCREENSHOT_BYTES / 1024)}KB limit. Reduce the viewport or the device scale factor.`,
+      );
+    }
+
+    return `data:image/png;base64,${Buffer.from(screenshot).toString("base64")}`;
   }
 }
