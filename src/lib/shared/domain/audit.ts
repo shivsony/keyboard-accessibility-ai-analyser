@@ -14,12 +14,26 @@ import {
 export const TerminationReasonSchema = z.enum([
   /** The agent decided STOP. */
   "AGENT_STOPPED",
+  /** The agent reported, and nothing was left to investigate. */
+  "INVESTIGATION_COMPLETE",
   /** The step budget ran out. The backstop that guarantees termination. */
   "STEP_BUDGET_EXHAUSTED",
+  /** The wall-clock budget ran out. */
+  "TIME_BUDGET_EXHAUSTED",
+  /**
+   * The same state came back too many times in a row.
+   *
+   * The safety net for a page that answers every keypress identically: without
+   * it, an agent that keeps choosing CONTINUE would spend the entire step budget
+   * learning nothing.
+   */
+  "REPEATED_STATE",
   /** The page navigated off the target origin. */
   "NAVIGATED_AWAY",
   /** The model returned something unparseable often enough to give up. */
   "DECISION_INVALID",
+  /** The AI provider failed or was unreachable. */
+  "AI_ERROR",
   /** The browser driver failed. */
   "DRIVER_ERROR",
   /** A human stopped it. */
