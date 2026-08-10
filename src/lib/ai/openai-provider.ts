@@ -4,7 +4,8 @@ import OpenAI from "openai";
 
 import { safeParseAgentDecision, type AgentDecision } from "@/lib/shared/domain";
 
-import { buildUserPrompt, DECISION_JSON_SCHEMA, SYSTEM_PROMPT } from "./prompt";
+import { buildUserPrompt, DECISION_JSON_SCHEMA } from "./prompt";
+import { SYSTEM_PROMPT } from "./system-prompt";
 import { safeErrorMessage } from "./redact";
 import {
   AIProviderError,
