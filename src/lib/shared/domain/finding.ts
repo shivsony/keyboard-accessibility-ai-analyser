@@ -92,6 +92,28 @@ const findingBase = {
 };
 
 /**
+ * Something the browser trace shows, with no interpretation attached.
+ *
+ * The factual layer. An observed finding is produced by `lib/rules` from the
+ * recorded traversal alone — no model involved — and says only "this pattern is
+ * present in the trace". Whether it *matters* is a separate question: a control
+ * the traversal never reached might be unreachable, or the run might simply
+ * have stopped early.
+ *
+ * Deliberately carries no reasoning and no confidence. Those are the model's
+ * contribution, and an observation that borrowed them would blur the line this
+ * three-state model exists to draw.
+ */
+export const ObservedFindingSchema = z.object({
+  id: FindingIdSchema,
+  status: z.literal("OBSERVED"),
+  details: FindingDetailsSchema,
+  observedAtStep: StepIndexSchema,
+  observedAt: TimestampSchema,
+});
+export type ObservedFinding = z.infer<typeof ObservedFindingSchema>;
+
+/**
  * The model flagged something, but nothing has corroborated it yet.
  *
  * Suspected findings never reach a report. They exist so the agent can hold a
@@ -122,11 +144,30 @@ export const ConfirmedFindingSchema = z.object({
 });
 export type ConfirmedFinding = z.infer<typeof ConfirmedFindingSchema>;
 
+/**
+ * The three states a finding moves through.
+ *
+ *   OBSERVED   the browser trace shows the pattern
+ *   SUSPECTED  the model thinks it means something
+ *   CONFIRMED  both, and the evidence has been checked
+ *
+ * A suspicion is never promoted on the model's word. The validator in
+ * `lib/rules` requires a matching observation and a trace that actually
+ * supports every factual claim (ARCHITECTURE.md §4).
+ */
 export const FindingSchema = z.discriminatedUnion("status", [
+  ObservedFindingSchema,
   SuspectedFindingSchema,
   ConfirmedFindingSchema,
 ]);
 export type Finding = z.infer<typeof FindingSchema>;
+
+export const FindingStatusSchema = z.enum(["OBSERVED", "SUSPECTED", "CONFIRMED"]);
+export type FindingStatus = z.infer<typeof FindingStatusSchema>;
+
+export function isObserved(finding: Finding): finding is ObservedFinding {
+  return finding.status === "OBSERVED";
+}
 
 export function isConfirmed(finding: Finding): finding is ConfirmedFinding {
   return finding.status === "CONFIRMED";

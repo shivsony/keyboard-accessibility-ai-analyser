@@ -3,6 +3,7 @@ import { isAIProviderError } from "@/lib/ai";
 import type { KeyboardExecutor, PageController } from "@/lib/browser";
 import { isBrowserLayerError } from "@/lib/browser";
 import { describePath, nodeIdForFocus, traversalPath } from "@/lib/graph";
+import { FindingValidator } from "@/lib/rules";
 import {
   activeInvestigation,
   agentMode,
@@ -281,6 +282,7 @@ export class ExplorationAgent {
         executedAction: completedStep.executedAction,
       });
       state = this.#recordIssue(state, decision, step, observedAt);
+      state = this.#validateReport(state, decision, step);
 
       // Development-time check that the transitions above kept memory coherent.
       // A violated invariant means the next finding built from this state would
@@ -508,6 +510,46 @@ export class ExplorationAgent {
       at,
       reason: decision.decision === "STOP" ? "RUN_ENDED" : "AGENT_MOVED_ON",
     });
+  }
+
+  /**
+   * Puts a REPORT through the validator.
+   *
+   * This is where a suspicion becomes a finding, or does not. The model has
+   * said what it thinks is wrong; the validator checks that against the
+   * recorded traversal and confirms only what the trace supports.
+   *
+   * A rejection is not an error. The run continues, the suspicion stays on the
+   * record as suspected, and the report simply does not get published — which
+   * is the intended outcome when a model reports something the page does not
+   * actually do.
+   */
+  #validateReport(
+    state: AgentState,
+    decision: AgentDecision,
+    step: StepIndex,
+  ): AgentState {
+    if (decision.decision !== "REPORT") return state;
+
+    const result = new FindingValidator(state).validate({
+      issue: decision.issue,
+      reason: decision.reason,
+      confidence: decision.confidence,
+      step,
+      targetElementId: decision.targetElementId ?? null,
+    });
+
+    if (result.outcome === "REJECTED") return state;
+
+    // Deduplicated by type: a page has one unreachable-controls problem, not
+    // one per step the agent chose to mention it.
+    const alreadyConfirmed = state.confirmedFindings.some(
+      (finding) => finding.details.type === result.finding.details.type,
+    );
+
+    return alreadyConfirmed
+      ? state
+      : { ...state, confirmedFindings: [...state.confirmedFindings, result.finding] };
   }
 
   /**
