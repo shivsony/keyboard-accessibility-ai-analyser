@@ -1,7 +1,8 @@
 # `lib/evidence`
 
 Screenshots, DOM/ARIA excerpts, and step records — assembled into the reproduction
-bundle attached to every finding.
+bundle attached to every finding. `EvidenceCollector` writes one bundle per completed
+agent step at `artifacts/<audit-id>/steps/<step-id>/`.
 
 Writes to the run directory. Run directories get attached to bug reports, so **nothing
 written here may contain a credential.**
