@@ -534,8 +534,8 @@ describe("hypotheses", () => {
     expect(provider.received[1]?.suspectedFindings).toHaveLength(1);
   }, 60_000);
 
-  // A finding is confirmed only when a deterministic signal corroborates it,
-  // and that corroboration lives in lib/rules, which is not built yet.
+  // A report on step 0 has no keyboard sequence behind it, so there is nothing
+  // to reproduce and the validator rejects it.
   it("never confirms a finding on the model's word alone", async () => {
     const provider = new MockAIProvider({
       script: [mockReport("UNREACHABLE_ELEMENT"), mockStop()],
@@ -545,6 +545,68 @@ describe("hypotheses", () => {
 
     expect(result.state.suspectedFindings.length).toBeGreaterThan(0);
     expect(result.state.confirmedFindings).toEqual([]);
+  }, 60_000);
+
+  // The other half of the rule: a report the trace *does* support is published.
+  it("confirms a report the traversal corroborates", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockContinue("TAB"),
+        mockContinue("TAB"),
+        mockContinue("TAB"),
+        mockReport("UNREACHABLE_ELEMENT"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+    const confirmed = result.state.confirmedFindings[0];
+
+    expect(result.state.confirmedFindings).toHaveLength(1);
+    expect(confirmed?.details.type).toBe("UNREACHABLE_ELEMENT");
+    // Every fact in the evidence came from the recording.
+    expect(confirmed?.evidence.keyboardSequence).toEqual(["TAB", "TAB", "TAB"]);
+    expect(confirmed?.evidence.screenshotIds.length).toBeGreaterThan(0);
+    expect(checkAgentStateInvariants(result.state)).toEqual([]);
+  }, 60_000);
+
+  // The model reports a problem the page does not have. Nothing is published.
+  it("rejects a report the traversal contradicts", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockContinue("TAB"),
+        mockContinue("TAB"),
+        mockContinue("TAB"),
+        // well-behaved.html reaches every control, so there is nothing
+        // unreachable for this claim to be about.
+        mockReport("UNREACHABLE_ELEMENT"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("well-behaved.html", provider);
+
+    expect(result.state.confirmedFindings).toEqual([]);
+    // The suspicion stays on the record; only the report was refused.
+    expect(result.state.suspectedFindings.length).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("does not confirm the same finding twice", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockContinue("TAB"),
+        mockContinue("TAB"),
+        mockContinue("TAB"),
+        mockReport("UNREACHABLE_ELEMENT"),
+        mockContinue("TAB"),
+        mockReport("UNREACHABLE_ELEMENT"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+
+    expect(result.state.confirmedFindings).toHaveLength(1);
   }, 60_000);
 
   it("does not raise the same hypothesis twice", async () => {
