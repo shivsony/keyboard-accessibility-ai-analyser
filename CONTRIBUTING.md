@@ -15,7 +15,7 @@ documents, so knowing them ahead of time saves everyone a round trip.
 ## What this project is
 
 An autonomous keyboard accessibility agent. It opens a URL, presses Tab and Shift+Tab,
-observes what happens, and uses an AI model *in the loop* to decide what to press next
+observes what happens, and uses an AI model _in the loop_ to decide what to press next
 and when something looks wrong.
 
 The AI is an exploration agent, not a classifier that post-processes a finished trace.
@@ -31,6 +31,7 @@ away from the project's premise.
 **Decisions:** `CONTINUE`, `INVESTIGATE`, `REPORT`, `STOP`.
 
 **Findings:**
+
 - unreachable interactive element
 - suspicious focus order
 - unexpected focus leaving the application/page
@@ -113,7 +114,7 @@ model.
 
 1. Fork and branch from `main`.
 2. Keep the diff focused.
-3. Explain in the description *what changed and why*, and call out anything that touches
+3. Explain in the description _what changed and why_, and call out anything that touches
    the allowlist, the guard, secret handling, or the contracts in ARCHITECTURE.md §3.
 4. Work through the security checklist in [SECURITY.md §10](SECURITY.md).
 5. Update the docs in the same PR when behaviour changes. A contract change that doesn't

@@ -11,8 +11,8 @@ The AI is an **exploration agent**, not a post-processing classifier. It is in t
 on every step, choosing the next keyboard action from what it just observed — it is not
 handed a finished trace and asked to label it.
 
-> **Status: pre-implementation.** This repository currently contains design documents
-> only. Nothing is built yet.
+> **Status: pre-implementation.** The application shell, tooling, and internal
+> architecture are in place. The audit engine is not built yet.
 
 ---
 
@@ -20,7 +20,7 @@ handed a finished trace and asked to label it.
 
 Automated accessibility scanners are good at static rule checks (missing labels, bad
 contrast, invalid ARIA). They are bad at the thing keyboard users actually experience:
-*moving through a live application with only a keyboard.*
+_moving through a live application with only a keyboard._
 
 Focus traps, skipped controls, focus that silently escapes into browser chrome, tab
 order that jumps around the page — these are behavioural, sequential, and stateful. You
@@ -63,21 +63,21 @@ that action is allowed to happen. See [SECURITY.md](SECURITY.md).
 
 ### Keyboard actions the agent may perform
 
-| Action      | Meaning                  |
-| ----------- | ------------------------ |
-| `TAB`       | Move focus forward       |
-| `SHIFT_TAB` | Move focus backward      |
+| Action      | Meaning             |
+| ----------- | ------------------- |
+| `TAB`       | Move focus forward  |
+| `SHIFT_TAB` | Move focus backward |
 
 That is the entire allowlist. Nothing else can be executed, by anyone, including the AI.
 
 ### Decisions the agent may return
 
-| Decision      | Meaning                                                        |
-| ------------- | -------------------------------------------------------------- |
-| `CONTINUE`    | Nothing notable; keep exploring.                                |
-| `INVESTIGATE` | Something looks off; keep going deliberately to confirm it.     |
-| `REPORT`      | Confident enough to emit a finding with evidence.               |
-| `STOP`        | Exploration is complete or no further progress is possible.     |
+| Decision      | Meaning                                                     |
+| ------------- | ----------------------------------------------------------- |
+| `CONTINUE`    | Nothing notable; keep exploring.                            |
+| `INVESTIGATE` | Something looks off; keep going deliberately to confirm it. |
+| `REPORT`      | Confident enough to emit a finding with evidence.           |
+| `STOP`        | Exploration is complete or no further progress is possible. |
 
 ### What the AI sees each step
 
@@ -157,13 +157,79 @@ See [SECURITY.md](SECURITY.md) for the full handling rules.
 
 ---
 
+## Getting started
+
+Requires Node.js 20.9+ and pnpm.
+
+```bash
+pnpm install
+pnpm exec playwright install chromium
+cp .env.example .env.local   # then add your own AI API key
+pnpm dev
+```
+
+### Scripts
+
+| Script           | What it does                                 |
+| ---------------- | -------------------------------------------- |
+| `pnpm dev`       | Development server                           |
+| `pnpm build`     | Production build                             |
+| `pnpm start`     | Serve the production build                   |
+| `pnpm typecheck` | `tsc --noEmit`                               |
+| `pnpm lint`      | ESLint                                       |
+| `pnpm format`    | Prettier, writing changes                    |
+| `pnpm test`      | Vitest (unit + integration)                  |
+| `pnpm test:e2e`  | Playwright (e2e; starts a dev server)        |
+| `pnpm verify`    | typecheck + lint + format check + unit tests |
+
+### Stack
+
+A single Next.js application — UI, API route handlers, and server-side audit
+orchestration in one deployable. There is no separate backend.
+
+Next.js (App Router) · TypeScript (strict) · Tailwind CSS · shadcn/ui · Playwright ·
+Vitest · Zod · pnpm
+
+### Layout
+
+```
+src/
+  app/          UI routes and API route handlers
+  components/   UI components (shadcn/ui in components/ui)
+  lib/
+    agent/      orchestration loop, agent state, action guard
+    ai/         decision client — holds the API key, server-only
+    browser/    the only module allowed to import Playwright
+    discovery/  interactive element discovery and reachability
+    evidence/   screenshots, step records, reproduction bundles
+    graph/      navigation graph — nodes, edges, cycle detection
+    report/     findings output
+    rules/      deterministic corroborating signals per finding type
+    shared/     domain model, env parsing, utilities
+tests/
+  fixtures/     test pages and shared test data
+  unit/         Vitest
+  integration/  Vitest
+  e2e/          Playwright
+```
+
+Each `src/lib/*` directory has a README describing its responsibility and its
+constraints.
+
+**Playwright and AI code are server-only.** ESLint blocks client code from importing
+them, and `src/lib/shared/env.ts` imports `server-only` so the API key cannot reach a
+browser bundle.
+
+---
+
 ## Documents
 
-| Document                             | What's in it                                      |
-| ------------------------------------ | ------------------------------------------------- |
-| [ARCHITECTURE.md](ARCHITECTURE.md)   | Components, data flow, contracts, invariants      |
-| [SECURITY.md](SECURITY.md)           | Threat model, action guard, secret handling       |
-| [CONTRIBUTING.md](CONTRIBUTING.md)   | How to propose and land changes                   |
+| Document                                   | What's in it                                 |
+| ------------------------------------------ | -------------------------------------------- |
+| [ARCHITECTURE.md](ARCHITECTURE.md)         | Components, data flow, contracts, invariants |
+| [SECURITY.md](SECURITY.md)                 | Threat model, action guard, secret handling  |
+| [CONTRIBUTING.md](CONTRIBUTING.md)         | How to propose and land changes              |
+| [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) | Every environment variable, and the rules    |
 
 ---
 

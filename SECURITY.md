@@ -8,12 +8,12 @@ boundaries are and what enforces them.
 
 ## 1. Trust model
 
-| Party | Trust | Why |
-| --- | --- | --- |
-| The user running the tool | Trusted | They chose the target and supplied the key. |
-| The agent process (Node) | Trusted | First-party code. Holds the key. |
-| The AI model's output | **Untrusted** | It is generated text. It may be wrong, or steered. |
-| The page under test | **Untrusted** | Arbitrary third-party web content. |
+| Party                            | Trust              | Why                                                   |
+| -------------------------------- | ------------------ | ----------------------------------------------------- |
+| The user running the tool        | Trusted            | They chose the target and supplied the key.           |
+| The agent process (Node)         | Trusted            | First-party code. Holds the key.                      |
+| The AI model's output            | **Untrusted**      | It is generated text. It may be wrong, or steered.    |
+| The page under test              | **Untrusted**      | Arbitrary third-party web content.                    |
 | Screenshots / DOM / ARIA content | **Untrusted data** | Page-controlled; may contain text aimed at the model. |
 
 Two of these deserve emphasis.
