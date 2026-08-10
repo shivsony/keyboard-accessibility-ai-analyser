@@ -96,7 +96,7 @@ describe("state helpers", () => {
     expect(keyboardSequence(state)).toEqual(["TAB", "TAB", "SHIFT_TAB"]);
   });
 
-  // This is the raw material for UNREACHABLE_INTERACTIVE_ELEMENT.
+  // This is the raw material for UNREACHABLE_ELEMENT.
   it("reports discovered elements the keyboard never reached", () => {
     const state = makeState({
       discoveredElements: [makeElement("a"), makeElement("b"), makeElement("c")],

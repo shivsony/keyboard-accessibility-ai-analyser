@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AIProviderError, OpenAIProvider, type OpenAIChatClient } from "@/lib/ai";
 
+import { actionFor } from "@/lib/shared/domain";
+
 import { makeAnalysisInput, RAW_CONTINUE } from "../../fixtures/ai";
 
 /**
@@ -84,7 +86,7 @@ describe("analyzeObservation", () => {
     const decision = await subject.analyzeObservation(makeAnalysisInput());
 
     expect(decision.decision).toBe("CONTINUE");
-    expect(decision.action).toBe("TAB");
+    expect(actionFor(decision)).toBe("TAB");
   });
 
   it("asks for the decision schema in strict mode", async () => {
@@ -141,14 +143,17 @@ describe("untrusted output", () => {
   // The structured-output mode shapes the reply; Zod decides whether it is
   // acceptable. The flat JSON schema cannot express that STOP carries no action.
   it("rejects a well-formed response that breaks a domain rule", async () => {
+    // INVESTIGATE with no suspected issue: the flat JSON schema permits it,
+    // because it cannot express which fields go with which decision.
     const { provider: subject } = provider(
       [
         JSON.stringify({
-          decision: "STOP",
+          decision: "INVESTIGATE",
           action: "TAB",
-          reasoning: "Done.",
+          reason: "Something looks off.",
           confidence: 0.9,
           suspectedIssue: null,
+          issue: null,
           targetElementId: null,
         }),
       ],

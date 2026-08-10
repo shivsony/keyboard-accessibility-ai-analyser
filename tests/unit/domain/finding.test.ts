@@ -28,7 +28,7 @@ const SUSPECTED = {
 describe("finding types", () => {
   it("covers exactly the five MVP findings", () => {
     expect([...FindingTypeSchema.options]).toEqual([
-      "UNREACHABLE_INTERACTIVE_ELEMENT",
+      "UNREACHABLE_ELEMENT",
       "SUSPICIOUS_FOCUS_ORDER",
       "UNEXPECTED_FOCUS_LEAVING_PAGE",
       "SUSPICIOUS_FOCUS_CYCLE",
@@ -48,14 +48,14 @@ describe("finding details", () => {
     expect(
       SuspectedFindingSchema.safeParse({
         ...SUSPECTED,
-        details: { type: "UNREACHABLE_INTERACTIVE_ELEMENT" },
+        details: { type: "UNREACHABLE_ELEMENT" },
       }).success,
     ).toBe(false);
 
     expect(
       SuspectedFindingSchema.safeParse({
         ...SUSPECTED,
-        details: { type: "UNREACHABLE_INTERACTIVE_ELEMENT", elementId: "a" },
+        details: { type: "UNREACHABLE_ELEMENT", elementId: "a" },
       }).success,
     ).toBe(true);
   });

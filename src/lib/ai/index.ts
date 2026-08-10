@@ -21,6 +21,8 @@ export {
 export {
   MockAIProvider,
   mockContinue,
+  mockInvestigate,
+  mockReport,
   mockStop,
   type MockAIProviderOptions,
 } from "./mock-provider";

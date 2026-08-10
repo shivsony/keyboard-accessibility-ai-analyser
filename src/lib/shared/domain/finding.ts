@@ -15,7 +15,7 @@ import { AccessibilitySnapshotSchema, DOMSnapshotSchema } from "./snapshot";
 
 /** The five MVP finding types. */
 export const FindingTypeSchema = z.enum([
-  "UNREACHABLE_INTERACTIVE_ELEMENT",
+  "UNREACHABLE_ELEMENT",
   "SUSPICIOUS_FOCUS_ORDER",
   "UNEXPECTED_FOCUS_LEAVING_PAGE",
   "SUSPICIOUS_FOCUS_CYCLE",
@@ -33,7 +33,7 @@ export type FindingType = z.infer<typeof FindingTypeSchema>;
  */
 export const FindingDetailsSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("UNREACHABLE_INTERACTIVE_ELEMENT"),
+    type: z.literal("UNREACHABLE_ELEMENT"),
     elementId: ElementIdSchema,
   }),
   z.object({

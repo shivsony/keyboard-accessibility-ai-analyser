@@ -114,7 +114,7 @@ export function visitedElementIds(graph: NavigationGraph): readonly ElementId[] 
 /**
  * Discovered controls the keyboard never reached.
  *
- * The raw material for UNREACHABLE_INTERACTIVE_ELEMENT. This reports the gap
+ * The raw material for UNREACHABLE_ELEMENT. This reports the gap
  * between what the page offers and what the traversal touched; whether the gap
  * is a defect — the traversal may simply be unfinished — is decided elsewhere.
  */

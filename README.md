@@ -92,11 +92,27 @@ That is the entire allowlist. Nothing else can be executed, by anyone, including
 
 ### What the AI returns each step
 
+Structured data only, validated with Zod before anything happens:
+
 - `decision` — one of the four above
-- `next_keyboard_action` — one of the allowlisted actions
-- `reasoning` — why
-- `confidence` — how sure
-- `suspected_issue` — when applicable
+- `action` — an allowlisted action, on `CONTINUE` and `INVESTIGATE`
+- `reason` — why
+- `confidence` — 0 to 1
+- `suspectedIssue` — `{ type, severity }`, required on `INVESTIGATE`
+- `issue` — `{ type, severity, title, description }`, required on `REPORT`
+
+```json
+{
+  "decision": "CONTINUE",
+  "action": "TAB",
+  "reason": "Continue exploring sequential keyboard navigation.",
+  "confidence": 0.94
+}
+```
+
+Malformed responses are rejected. **The browser executes nothing until the
+response passes schema validation**, and a rejected response never falls back to
+a default action. See [ARCHITECTURE.md §3.2](ARCHITECTURE.md).
 
 ### Findings the MVP can produce
 

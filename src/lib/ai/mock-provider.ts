@@ -1,4 +1,10 @@
-import { AgentDecisionSchema, confidence, type AgentDecision } from "@/lib/shared/domain";
+import {
+  AgentDecisionSchema,
+  confidence,
+  type AgentDecision,
+  type FindingType,
+  type KeyboardAction,
+} from "@/lib/shared/domain";
 
 import { AIProviderError, type AgentAnalysisInput, type AIProvider } from "./types";
 
@@ -33,22 +39,46 @@ export type MockAIProviderOptions = {
 
 const STOP: AgentDecision = Object.freeze({
   decision: "STOP",
-  action: null,
-  reasoning: "Mock provider has no further scripted decisions.",
+  reason: "Mock provider has no further scripted decisions.",
   confidence: confidence(1),
-  suspectedIssue: null,
-  targetElementId: null,
 });
 
 /** A CONTINUE that presses the given key. Convenience for building scripts. */
-export function mockContinue(action: "TAB" | "SHIFT_TAB" = "TAB"): AgentDecision {
+export function mockContinue(action: KeyboardAction = "TAB"): AgentDecision {
   return AgentDecisionSchema.parse({
     decision: "CONTINUE",
     action,
-    reasoning: "Scripted: keep traversing.",
+    reason: "Scripted: keep traversing.",
     confidence: 0.8,
-    suspectedIssue: null,
-    targetElementId: null,
+  });
+}
+
+/** An INVESTIGATE naming a suspicion, for tests about hypotheses. */
+export function mockInvestigate(
+  type: FindingType,
+  action: KeyboardAction = "SHIFT_TAB",
+): AgentDecision {
+  return AgentDecisionSchema.parse({
+    decision: "INVESTIGATE",
+    action,
+    reason: "Scripted: something looks wrong, going back to check.",
+    confidence: 0.7,
+    suspectedIssue: { type, severity: "MEDIUM" },
+  });
+}
+
+/** A REPORT carrying a full issue, for tests about findings. */
+export function mockReport(type: FindingType): AgentDecision {
+  return AgentDecisionSchema.parse({
+    decision: "REPORT",
+    reason: "Scripted: the traversal demonstrates this.",
+    confidence: 0.95,
+    issue: {
+      type,
+      severity: "HIGH",
+      title: `Scripted ${type}`,
+      description: "A scripted issue produced by the mock provider.",
+    },
   });
 }
 

@@ -49,7 +49,7 @@ export type RawDomSummary = {
  * Collects every element a keyboard user could plausibly reach.
  *
  * Over-collecting is the safer error: an element listed here but never focused
- * becomes a candidate UNREACHABLE_INTERACTIVE_ELEMENT, which a human reviews.
+ * becomes a candidate UNREACHABLE_ELEMENT, which a human reviews.
  * An element missed here is invisible to the whole audit.
  */
 export function collectInteractiveElements(limit: number): RawElement[] {
