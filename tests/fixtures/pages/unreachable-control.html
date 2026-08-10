@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Unreachable control</title>
+  </head>
+  <body>
+    <main>
+      <h1>Unreachable control</h1>
+      <button id="reachable">Reachable</button>
+
+      <!--
+        The bug under test: a div carrying an interactive role and a click
+        handler, with no tabindex. A mouse user sees a button. A keyboard user
+        cannot reach it at all.
+      -->
+      <div id="fake-button" role="button" onclick="void 0">Delete account</div>
+
+      <button id="also-reachable">Also reachable</button>
+    </main>
+  </body>
+</html>

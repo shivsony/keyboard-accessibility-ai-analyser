@@ -27,8 +27,7 @@ export type KeyboardAction = z.infer<typeof KeyboardActionSchema>;
  */
 export function isKeyboardAction(value: unknown): value is KeyboardAction {
   return (
-    typeof value === "string" &&
-    (KEYBOARD_ACTIONS as readonly string[]).includes(value)
+    typeof value === "string" && (KEYBOARD_ACTIONS as readonly string[]).includes(value)
   );
 }
 

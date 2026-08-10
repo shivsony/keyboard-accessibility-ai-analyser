@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Tabindex jumble</title>
+  </head>
+  <body>
+    <main>
+      <h1>Tabindex jumble</h1>
+
+      <!--
+        Positive tabindex values reorder the tab sequence away from the visual
+        order: focus starts at the last control on screen. This is the classic
+        cause of SUSPICIOUS_FOCUS_ORDER.
+      -->
+      <button id="visually-first" tabindex="3">Visually first</button>
+      <button id="visually-second" tabindex="2">Visually second</button>
+      <button id="visually-third" tabindex="1">Visually third</button>
+
+      <div id="focusable-div" tabindex="0">Focusable div</div>
+    </main>
+  </body>
+</html>

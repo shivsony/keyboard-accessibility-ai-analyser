@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hangs</title>
+  </head>
+  <body>
+    <main>
+      <h1>Hangs</h1>
+      <button id="only">Only control</button>
+    </main>
+
+    <script>
+      // Load completes, then the main thread wedges. Playwright puts no timeout
+      // of its own on page.evaluate, so this is what the browser layer's own
+      // timeout exists for: without it, an observation against a page like this
+      // never returns and the audit hangs forever.
+      setTimeout(() => {
+        const until = Date.now() + 30000;
+        while (Date.now() < until) {
+          // Deliberately blocking.
+        }
+      }, 300);
+    </script>
+  </body>
+</html>
