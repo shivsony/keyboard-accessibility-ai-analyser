@@ -11,6 +11,7 @@
 
 export * from "./types";
 export * from "./prompt";
+export * from "./system-prompt";
 export { redactSecrets, safeErrorMessage, REDACTED } from "./redact";
 export { createAIProvider, checkAIConfiguration } from "./factory";
 export {
