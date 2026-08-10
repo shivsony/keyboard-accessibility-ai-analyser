@@ -200,6 +200,42 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
     );
   }
 
+  // The open investigation, when there is one. Placed before the element list
+  // so the model reads its own question before the raw material — an agent that
+  // re-reads the page first tends to start a new line of enquiry instead of
+  // finishing the one it has.
+  if (input.investigation !== null) {
+    const investigation = input.investigation;
+
+    sections.push(
+      ``,
+      `>>> YOU ARE INVESTIGATING — this is not ordinary exploration <<<`,
+      `  Suspicion:    ${investigation.issueType} (${investigation.severity})`,
+      `  Triggered at: step ${investigation.triggeringStep}`,
+      `  Confidence:   ${investigation.confidence}`,
+      `  Suspicious controls: ${
+        investigation.suspiciousElementIds.length === 0
+          ? "(none identified)"
+          : investigation.suspiciousElementIds.join(", ")
+      }`,
+      `  Keys spent so far: ${
+        investigation.evidenceActions.length === 0
+          ? "(none yet)"
+          : investigation.evidenceActions.join(" → ")
+      }`,
+      `  Your hypotheses:`,
+      ...investigation.hypotheses.map(
+        (hypothesis) =>
+          `    - (step ${hypothesis.raisedAtStep}, confidence ${hypothesis.confidence}) ${hypothesis.statement}`,
+      ),
+      ``,
+      `  Continue with INVESTIGATE while you are still gathering evidence.`,
+      `  Return REPORT once the sequence above demonstrates the problem.`,
+      `  Return CONTINUE to drop this line of enquiry and resume exploring —`,
+      `  which is the right call if the evidence has not borne it out.`,
+    );
+  }
+
   // Always rendered, even when empty: "no hypotheses open" is information the
   // model needs, and a section that appears only sometimes is easy to overlook
   // when it finally does.

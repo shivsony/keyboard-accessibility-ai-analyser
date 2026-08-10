@@ -32,12 +32,17 @@ export type ScreenshotId = z.infer<typeof ScreenshotIdSchema>;
 export const FindingIdSchema = z.string().min(1).brand<"FindingId">();
 export type FindingId = z.infer<typeof FindingIdSchema>;
 
+export const InvestigationIdSchema = z.string().min(1).brand<"InvestigationId">();
+export type InvestigationId = z.infer<typeof InvestigationIdSchema>;
+
 export const auditId = (value: string): AuditId => AuditIdSchema.parse(value);
 export const elementId = (value: string): ElementId => ElementIdSchema.parse(value);
 export const nodeId = (value: string): NodeId => NodeIdSchema.parse(value);
 export const screenshotId = (value: string): ScreenshotId =>
   ScreenshotIdSchema.parse(value);
 export const findingId = (value: string): FindingId => FindingIdSchema.parse(value);
+export const investigationId = (value: string): InvestigationId =>
+  InvestigationIdSchema.parse(value);
 
 /**
  * Zero-based index of a step in the agent loop.

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Skipped controls</title>
+  </head>
+  <body>
+    <main>
+      <h1>Skipped controls</h1>
+
+      <!--
+        The worked example: four controls are discoverable, but Tab only reaches
+        Logo, Search and Checkout. Menu and Filter carry an interactive role and
+        no tabindex, so a mouse user sees buttons a keyboard user cannot get to.
+      -->
+      <a id="logo" href="#top">Logo</a>
+      <div id="menu" role="button" onclick="void 0">Menu</div>
+      <input id="search" type="search" aria-label="Search" />
+      <div id="filter" role="button" onclick="void 0">Filter</div>
+      <button id="checkout">Checkout</button>
+    </main>
+  </body>
+</html>

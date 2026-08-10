@@ -14,8 +14,19 @@ import { StepIndexSchema, TimestampSchema } from "./primitives";
  * happened" stay distinguishable in the record. Collapsing them would make a
  * rejected action look like an executed one when the run is replayed.
  */
+/**
+ * Which mode the agent was in when it took the step.
+ *
+ * Recorded per step rather than derived later, because "was the agent
+ * investigating at the time?" is the question that separates a keypress spent
+ * gathering evidence from one spent covering new ground.
+ */
+export const AgentModeSchema = z.enum(["EXPLORING", "INVESTIGATING"]);
+export type AgentMode = z.infer<typeof AgentModeSchema>;
+
 export const AgentStepSchema = z.object({
   index: StepIndexSchema,
+  mode: AgentModeSchema,
   observation: AgentObservationSchema,
   decision: AgentDecisionSchema,
   guardVerdict: ActionGuardVerdictSchema,

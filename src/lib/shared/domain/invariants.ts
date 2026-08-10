@@ -33,6 +33,10 @@ export const INVARIANT_CODES = Object.freeze([
   "EVIDENCE_SEQUENCE_NOT_PREFIX",
   "EVIDENCE_STEP_RANGE_INVERTED",
   "DUPLICATE_SCREENSHOT_ID",
+  "MULTIPLE_OPEN_INVESTIGATIONS",
+  "INVESTIGATION_ELEMENT_NOT_DISCOVERED",
+  "CLOSED_INVESTIGATION_WITHOUT_OUTCOME",
+  "DUPLICATE_INVESTIGATION_ID",
 ] as const);
 
 export type InvariantCode = (typeof INVARIANT_CODES)[number];
@@ -260,6 +264,51 @@ export function checkAgentStateInvariants(
         "EVIDENCE_STEP_RANGE_INVERTED",
         `finding ${finding.id} has step range ${evidence.steps.from}..${evidence.steps.to}`,
       );
+    }
+  }
+
+  // --- Investigations ----------------------------------------------------
+
+  const open = state.investigations.filter((each) => each.status === "OPEN");
+
+  // Two questions pursued at once means neither has a clean evidence path:
+  // each one's keypresses are interleaved with the other's.
+  if (open.length > 1) {
+    report(
+      "MULTIPLE_OPEN_INVESTIGATIONS",
+      `${open.length} investigations are open at once; at most one may be`,
+    );
+  }
+
+  for (const id of duplicates(state.investigations.map((each) => each.id))) {
+    report("DUPLICATE_INVESTIGATION_ID", `investigation id ${id} appears more than once`);
+  }
+
+  for (const investigation of state.investigations) {
+    for (const elementId of investigation.suspiciousElementIds) {
+      if (!discoveredIds.has(elementId)) {
+        report(
+          "INVESTIGATION_ELEMENT_NOT_DISCOVERED",
+          `investigation ${investigation.id} suspects element ${elementId}, which discovery never saw`,
+        );
+      }
+    }
+
+    // A closed investigation with no closing time cannot be placed in the run,
+    // and an abandoned one with no reason cannot be explained.
+    if (investigation.status !== "OPEN") {
+      if (investigation.closedAt === null) {
+        report(
+          "CLOSED_INVESTIGATION_WITHOUT_OUTCOME",
+          `investigation ${investigation.id} is ${investigation.status} but has no closing time`,
+        );
+      }
+      if (investigation.status === "ABANDONED" && investigation.abandonReason === null) {
+        report(
+          "CLOSED_INVESTIGATION_WITHOUT_OUTCOME",
+          `investigation ${investigation.id} was abandoned without a reason`,
+        );
+      }
     }
   }
 

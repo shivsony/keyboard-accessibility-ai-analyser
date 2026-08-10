@@ -164,6 +164,7 @@ export function makeStep(
 ): AgentStep {
   return {
     index,
+    mode: "EXPLORING",
     observation: makeObservation(index),
     decision:
       action === null

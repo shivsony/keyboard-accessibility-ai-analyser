@@ -4,6 +4,7 @@ import type {
   AuditId,
   ElementId,
   InteractiveElement,
+  InvestigationContext,
   KeyboardActionRecord,
   StepIndex,
   SuspectedFinding,
@@ -49,6 +50,15 @@ export type AgentAnalysisInput = {
 
   /** Hypotheses the agent is still testing. */
   readonly suspectedFindings: readonly SuspectedFinding[];
+
+  /**
+   * The line of enquiry currently being pursued, if any.
+   *
+   * Its presence is what tells the model it is mid-investigation rather than
+   * exploring — without it, an agent has no memory of the question it was
+   * trying to answer two keypresses ago.
+   */
+  readonly investigation: InvestigationContext | null;
 
   /** Screenshot bytes for the current state, when the model can see images. */
   readonly screenshot: Uint8Array | null;

@@ -9,6 +9,7 @@ import {
   AIProviderError,
   type AIProvider,
 } from "@/lib/ai";
+import { activeInvestigation, agentMode } from "@/lib/shared/domain";
 import {
   DEFAULT_SESSION_OPTIONS,
   KeyboardExecutor,
@@ -56,6 +57,7 @@ function explorationOptions(
     maxSteps: 20,
     maxDurationMs: 120_000,
     repeatedStateThreshold: 6,
+    maxInvestigationSteps: 12,
     ...overrides,
   };
 }
@@ -557,5 +559,241 @@ describe("hypotheses", () => {
     const result = await explore("focus-trap.html", provider);
 
     expect(result.state.suspectedFindings).toHaveLength(1);
+  }, 60_000);
+});
+
+describe("investigation", () => {
+  /**
+   * skipped-controls.html is the worked example: Logo, Menu, Search, Filter and
+   * Checkout are all discoverable, but Tab reaches only Logo, Search and
+   * Checkout. Menu and Filter are divs with role=button and no tabindex.
+   */
+
+  it("discovers controls the traversal cannot reach", async () => {
+    const provider = new MockAIProvider({
+      script: [mockContinue("TAB"), mockContinue("TAB"), mockContinue("TAB"), mockStop()],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+    const reached = new Set(result.state.visitedElementIds);
+    const missed = result.state.discoveredElements.filter(
+      (element) => !reached.has(element.id),
+    );
+
+    expect(result.state.discoveredElements).toHaveLength(5);
+    expect(missed.map((element) => element.accessibleName).sort()).toEqual([
+      "Filter",
+      "Menu",
+    ]);
+  }, 60_000);
+
+  // The suspicion is visible in the input the model receives, which is what
+  // lets it notice the gap in the first place.
+  it("shows the model which controls were skipped", async () => {
+    const provider = new MockAIProvider({
+      script: [mockContinue("TAB"), mockContinue("TAB"), mockStop()],
+    });
+
+    await explore("skipped-controls.html", provider);
+
+    const last = provider.received.at(-1);
+    const reached = new Set(last?.visitedElementIds ?? []);
+
+    expect(
+      (last?.discoveredElements ?? []).filter((element) => !reached.has(element.id)),
+    ).not.toHaveLength(0);
+  }, 60_000);
+
+  it("switches into investigating mode and records it per step", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockContinue("TAB"),
+        mockContinue("TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "SHIFT_TAB"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+
+    expect(result.state.steps.map((step) => step.mode)).toEqual([
+      "EXPLORING",
+      "EXPLORING",
+      "EXPLORING", // the step that *decided* to investigate was still exploring
+      "INVESTIGATING", // the next step ran while the enquiry was open
+    ]);
+  }, 60_000);
+
+  it("accumulates evidence across several investigating steps", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockContinue("TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "SHIFT_TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "SHIFT_TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "TAB"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+    const investigation = result.state.investigations[0];
+
+    expect(result.state.investigations).toHaveLength(1);
+    expect(investigation?.evidenceActions).toEqual(["SHIFT_TAB", "SHIFT_TAB", "TAB"]);
+    expect(investigation?.attemptedActions.map((record) => record.step)).toEqual([
+      1, 2, 3,
+    ]);
+    expect(investigation?.suspiciousElementIds.length).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("tells the model it is investigating, with the evidence so far", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockInvestigate("UNREACHABLE_ELEMENT", "TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "TAB"),
+        mockStop(),
+      ],
+    });
+
+    await explore("skipped-controls.html", provider);
+
+    // The first request had no open enquiry; the second was mid-investigation.
+    expect(provider.received[0]?.investigation).toBeNull();
+    expect(provider.received[1]?.investigation).not.toBeNull();
+    expect(provider.received[1]?.investigation?.issueType).toBe("UNREACHABLE_ELEMENT");
+    expect(provider.received[1]?.investigation?.evidenceActions).toEqual(["TAB"]);
+  }, 60_000);
+
+  it("confirms the investigation when the agent reports", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockContinue("TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "SHIFT_TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "TAB"),
+        mockReport("UNREACHABLE_ELEMENT"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+    const investigation = result.state.investigations[0];
+
+    expect(investigation?.status).toBe("CONFIRMED");
+    expect(investigation?.closedAt).not.toBeNull();
+    expect(investigation?.evidenceActions).toEqual(["SHIFT_TAB", "TAB"]);
+    expect(agentMode(result.state)).toBe("EXPLORING");
+  }, 60_000);
+
+  // Dropping a suspicion that did not bear out is what resuming ordinary
+  // exploration looks like from outside.
+  it("abandons the enquiry when the agent goes back to exploring", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockInvestigate("UNREACHABLE_ELEMENT", "SHIFT_TAB"),
+        mockContinue("TAB"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+    const investigation = result.state.investigations[0];
+
+    expect(investigation?.status).toBe("ABANDONED");
+    expect(investigation?.abandonReason).toBe("AGENT_MOVED_ON");
+    expect(activeInvestigation(result.state)).toBeNull();
+  }, 60_000);
+
+  it("keeps an abandoned enquiry on the record", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockInvestigate("SUSPICIOUS_FOCUS_ORDER", "SHIFT_TAB"),
+        mockContinue("TAB"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+
+    expect(result.state.investigations).toHaveLength(1);
+    expect(result.state.investigations[0]?.hypotheses.length).toBeGreaterThan(0);
+  }, 60_000);
+
+  // Two questions at once means neither has a clean evidence path.
+  it("closes the current enquiry before opening one about something else", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockInvestigate("UNREACHABLE_ELEMENT", "TAB"),
+        mockInvestigate("SUSPICIOUS_FOCUS_ORDER", "TAB"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+
+    expect(result.state.investigations).toHaveLength(2);
+    expect(result.state.investigations[0]?.status).toBe("ABANDONED");
+    expect(result.state.investigations[1]?.issueType).toBe("SUSPICIOUS_FOCUS_ORDER");
+  }, 60_000);
+
+  // A line of enquiry must not quietly consume the whole run.
+  it("abandons an investigation that outstays its budget", async () => {
+    const provider = new MockAIProvider({
+      respond: () => mockInvestigate("UNREACHABLE_ELEMENT", "TAB"),
+    });
+
+    const result = await explore("skipped-controls.html", provider, {
+      maxSteps: 12,
+      maxInvestigationSteps: 3,
+    });
+
+    const abandoned = result.state.investigations.filter(
+      (investigation) => investigation.abandonReason === "BUDGET_EXHAUSTED",
+    );
+
+    expect(abandoned.length).toBeGreaterThan(0);
+    expect(abandoned[0]?.attemptedActions).toHaveLength(3);
+  }, 60_000);
+
+  // Investigating is still exploring with the keyboard: every keypress an
+  // enquiry makes goes through the same guard as any other.
+  it("does not let investigation bypass the action guard", async () => {
+    const rogue: AIProvider = {
+      name: "rogue-investigator",
+      model: "rogue",
+      multimodal: true,
+      analyzeObservation: async () =>
+        ({
+          decision: "INVESTIGATE",
+          action: "ENTER",
+          reason: "Activate the menu to see whether it is reachable.",
+          confidence: 0.9,
+          suspectedIssue: { type: "UNREACHABLE_ELEMENT", severity: "HIGH" },
+        }) as never,
+    };
+
+    const result = await explore("skipped-controls.html", rogue);
+
+    expect(result.terminationReason).toBe("DECISION_INVALID");
+    expect(result.state.steps.at(-1)?.guardVerdict.outcome).toBe("REJECTED");
+    expect(result.state.keyboardHistory).toHaveLength(0);
+    // Nothing was investigated, because nothing was executed.
+    expect(result.state.investigations).toEqual([]);
+  }, 60_000);
+
+  it("keeps the state coherent throughout an investigation", async () => {
+    const provider = new MockAIProvider({
+      script: [
+        mockContinue("TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "SHIFT_TAB"),
+        mockInvestigate("UNREACHABLE_ELEMENT", "TAB"),
+        mockReport("UNREACHABLE_ELEMENT"),
+        mockContinue("TAB"),
+        mockStop(),
+      ],
+    });
+
+    const result = await explore("skipped-controls.html", provider);
+
+    expect(checkAgentStateInvariants(result.state)).toEqual([]);
   }, 60_000);
 });

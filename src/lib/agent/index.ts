@@ -8,6 +8,7 @@
 
 export * from "./action-guard";
 export * from "./state-updates";
+export * from "./investigation";
 export {
   ExplorationAgent,
   DEFAULT_EXPLORATION_OPTIONS,

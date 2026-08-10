@@ -35,6 +35,7 @@ export function makeAnalysisInput(
     keyboardHistory: [{ step: 0, action: "TAB", at: "2026-08-10T12:00:00.000Z" }],
     navigationSummary: "Logo --TAB--> Search",
     suspectedFindings: [],
+    investigation: null,
     // A valid, if tiny, PNG. The realistic default: every observation carries a
     // screenshot, and a provider in `required` mode fails the step without one.
     screenshot: TINY_PNG,
