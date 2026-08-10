@@ -3,6 +3,11 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import type { KeyboardAccessibilityReport } from "@/lib/report";
+import type {
+  AuditFailure,
+  AuditStatus,
+  LiveAuditSnapshot,
+} from "@/lib/shared/api-types";
 import { auditId as toAuditId, type AuditId, type Url } from "@/lib/shared/domain";
 
 /**
@@ -25,22 +30,6 @@ import { auditId as toAuditId, type AuditId, type Url } from "@/lib/shared/domai
  * the interface here is small enough to make that a contained change.
  */
 
-export type AuditStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-
-/**
- * A failure, as the API is allowed to describe it.
- *
- * Coded rather than free-form because the message crosses a network boundary:
- * a caller branches on the code, and the message is written for a human without
- * ever quoting an internal path, an environment variable, or a provider error
- * that might echo a request header.
- */
-export type AuditFailure = {
-  readonly code:
-    "BROWSER_FAILURE" | "AI_FAILURE" | "AI_NOT_CONFIGURED" | "TIMEOUT" | "INTERNAL";
-  readonly message: string;
-};
-
 export type AuditRecord = {
   readonly id: AuditId;
   readonly url: Url;
@@ -50,6 +39,8 @@ export type AuditRecord = {
   readonly createdAt: string;
   readonly startedAt: string | null;
   readonly completedAt: string | null;
+  /** What the agent is doing right now. Null until the first step completes. */
+  readonly live: LiveAuditSnapshot | null;
   readonly report: KeyboardAccessibilityReport | null;
   readonly error: AuditFailure | null;
 };
@@ -57,6 +48,7 @@ export type AuditRecord = {
 /** What a runner reports back as it goes. */
 export type AuditProgress = {
   onStep(step: number): void;
+  onLive(snapshot: LiveAuditSnapshot): void;
 };
 
 export type AuditRunner = (input: {
@@ -102,6 +94,7 @@ export class AuditRegistry {
       createdAt: new Date().toISOString(),
       startedAt: null,
       completedAt: null,
+      live: null,
       report: null,
       error: null,
     };
@@ -156,7 +149,10 @@ export class AuditRegistry {
         auditId: id,
         url,
         signal,
-        progress: { onStep: (step) => this.#update(id, { step }) },
+        progress: {
+          onStep: (step) => this.#update(id, { step }),
+          onLive: (live) => this.#update(id, { live, step: live.step + 1 }),
+        },
       });
 
       // A cancellation that arrived while the run was finishing must not be
