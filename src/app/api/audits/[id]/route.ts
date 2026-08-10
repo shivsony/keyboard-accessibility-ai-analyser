@@ -65,6 +65,7 @@ function toResponse(record: AuditRecord): {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  live: AuditRecord["live"];
   result: AuditRecord["report"];
   error: AuditRecord["error"];
 } {
@@ -76,6 +77,7 @@ function toResponse(record: AuditRecord): {
     createdAt: record.createdAt,
     startedAt: record.startedAt,
     completedAt: record.completedAt,
+    live: record.live,
     result: record.report,
     error: record.error,
   };

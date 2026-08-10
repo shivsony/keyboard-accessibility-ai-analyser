@@ -106,6 +106,14 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // Screenshot evidence is served from our own API at whatever size the audit's
+  // viewport produced. `next/image` wants known dimensions and an optimizer, and
+  // would re-encode evidence that is meant to be exactly what the browser saw.
+  {
+    files: ["src/components/audit/**/*.tsx"],
+    rules: { "@next/next/no-img-element": "off" },
+  },
+
   // Client components may reach none of it. Last, so it wins for components.
   {
     files: ["src/components/**/*.{ts,tsx}"],

@@ -9,11 +9,16 @@ import {
   KeyboardExecutor,
   PlaywrightBrowserController,
 } from "@/lib/browser";
+import { traversalPath } from "@/lib/graph";
 import { ReportGenerator } from "@/lib/report";
+import type { LiveAuditSnapshot, LiveFinding } from "@/lib/shared/api-types";
+import { focusedElement, type AgentState, type FocusState } from "@/lib/shared/domain";
 import { getEnv } from "@/lib/shared/env";
 
 import { DEFAULT_EXPLORATION_OPTIONS, ExplorationAgent } from "./exploration-agent";
-import type { AuditFailure, AuditRunner } from "./audit-registry";
+import type { AuditFailure } from "@/lib/shared/api-types";
+
+import type { AuditRunner } from "./audit-registry";
 
 /**
  * Runs one audit, server-side, start to finish.
@@ -82,6 +87,11 @@ export const runAudit: AuditRunner = async ({ auditId, url, signal, progress }) 
         ...DEFAULT_EXPLORATION_OPTIONS,
         maxSteps: env.AGENT_MAX_STEPS,
         signal,
+        onProgress: (update) => {
+          progress.onLive(toLiveSnapshot(update));
+        },
+        onScreenshot: (step, png) =>
+          writeScreenshot(auditId, step, png, env.EVIDENCE_DIR),
       },
     );
 
@@ -128,6 +138,92 @@ export const runAudit: AuditRunner = async ({ auditId, url, signal, progress }) 
     await browser.close().catch(() => undefined);
   }
 };
+
+/**
+ * Reduces a progress update to what a display needs.
+ *
+ * Only the model's one-line reason travels, never a longer rationale: this is a
+ * developer tool, and a live view narrating a train of thought would be both
+ * noise and a claim about the model's internals that nobody can check. The full
+ * reasoning trail is in the report, labelled as interpretation.
+ */
+function toLiveSnapshot(update: {
+  step: number;
+  mode: "EXPLORING" | "INVESTIGATING";
+  currentFocus: FocusState;
+  lastAction: string | null;
+  discoveredCount: number;
+  visitedCount: number;
+  decision: { decision: string; reason: string; confidence: number };
+  state: AgentState;
+}): LiveAuditSnapshot {
+  return {
+    step: update.step,
+    mode: update.mode,
+    currentFocus: focusLabel(update.currentFocus),
+    lastAction: update.lastAction === null ? null : actionLabel(update.lastAction),
+    discoveredCount: update.discoveredCount,
+    visitedCount: update.visitedCount,
+    decision: update.decision.decision,
+    rationale: update.decision.reason,
+    confidence: update.decision.confidence,
+    path: pathLabels(update.state),
+    findings: update.state.confirmedFindings.map((finding): LiveFinding => ({
+      id: finding.id,
+      severity: finding.severity,
+      title: finding.suggestedFix,
+      confidence: finding.confidence,
+      path: finding.evidence.keyboardSequence.map(actionLabel),
+      screenshotStep: finding.evidence.steps.to,
+    })),
+  };
+}
+
+function actionLabel(action: string): string {
+  return action === "SHIFT_TAB" ? "Shift+Tab" : "Tab";
+}
+
+function focusLabel(focus: FocusState): string {
+  const element = focusedElement(focus);
+  if (element !== null) return element.accessibleName ?? element.role ?? element.tagName;
+
+  switch (focus.kind) {
+    case "BODY":
+      return "the document body";
+    case "OUTSIDE_PAGE":
+      return "outside the page";
+    default:
+      return "not observed";
+  }
+}
+
+function pathLabels(state: AgentState): readonly string[] {
+  const path = traversalPath(state.navigationGraph);
+
+  return path.nodes.map(
+    (node) => node.accessibleName ?? node.role ?? node.elementId ?? node.focusKind,
+  );
+}
+
+/**
+ * Writes one step's screenshot.
+ *
+ * Bytes are not kept in the run record, so this is the only chance to persist
+ * them — and without them a finding has no visual evidence to show.
+ */
+async function writeScreenshot(
+  auditId: string,
+  step: number,
+  png: Uint8Array,
+  evidenceDir: string,
+): Promise<void> {
+  assertSafeAuditId(auditId);
+
+  const directory = path.resolve(evidenceDir, auditId, "steps");
+
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, `${String(step).padStart(4, "0")}.png`), png);
+}
 
 /**
  * Whether a termination reason is a failure or a truncated success.
@@ -178,12 +274,7 @@ async function writeReport(
   report: unknown,
   evidenceDir: string,
 ): Promise<void> {
-  // The id is a generated UUID, but it reaches a path — validated anyway,
-  // because a check that only fires when something upstream changes is exactly
-  // the check worth keeping.
-  if (!/^[A-Za-z0-9_-]+$/.test(auditId)) {
-    throw new Error("Refusing to write artifacts for an unsafe audit id");
-  }
+  assertSafeAuditId(auditId);
 
   const directory = path.resolve(evidenceDir, auditId);
 
@@ -193,4 +284,17 @@ async function writeReport(
     `${JSON.stringify(report, null, 2)}\n`,
     "utf8",
   );
+}
+
+/**
+ * The audit id reaches a filesystem path.
+ *
+ * It is a generated UUID today, so this never fires — which is exactly why it
+ * is worth keeping. A check that only matters when something upstream changes
+ * is the one you want already in place when it does.
+ */
+function assertSafeAuditId(auditId: string): void {
+  if (!/^[A-Za-z0-9_-]+$/.test(auditId)) {
+    throw new Error("Refusing to write artifacts for an unsafe audit id");
+  }
 }

@@ -188,6 +188,24 @@ See [SECURITY.md](SECURITY.md) for the full handling rules.
 
 ---
 
+## Pages
+
+| Route                | What it is                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `/`                  | URL input and the note about what running an audit costs                                                           |
+| `/audits/:id`        | Live view — status, step, focus, last action, current decision, exploration path, and issues as they are confirmed |
+| `/audits/:id/report` | The finished report: overview, keyboard map, journey, findings, evidence                                           |
+
+The live view **polls** every two seconds and stops once the run ends. There is
+no socket, because there is no queue behind it either — see the deployment note
+below.
+
+The live view shows a one-line rationale per decision, not the model's working.
+The full reasoning trail is in the report, where it is labelled as
+interpretation rather than observation.
+
+---
+
 ## API
 
 ```bash

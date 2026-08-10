@@ -425,6 +425,7 @@ describe("what the API refuses to return", () => {
       "createdAt",
       "error",
       "id",
+      "live",
       "result",
       "startedAt",
       "status",

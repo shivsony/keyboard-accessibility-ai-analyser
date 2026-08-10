@@ -81,6 +81,34 @@ export type ExplorationOptions = {
   readonly signal?: AbortSignal;
   /** Injected in tests. */
   readonly now?: () => number;
+
+  /**
+   * Called after each completed step, so a caller can show progress.
+   *
+   * Best-effort: a throwing observer must not end an audit, so failures here
+   * are swallowed. Reporting progress is not part of the run's correctness.
+   */
+  readonly onProgress?: (progress: AgentProgress) => void;
+
+  /**
+   * Called with each screenshot as it is captured.
+   *
+   * The bytes are not kept in `AgentState` — a megabyte per step would make the
+   * run record unreadable — so this is the only chance to persist them.
+   */
+  readonly onScreenshot?: (step: StepIndex, png: Uint8Array) => void | Promise<void>;
+};
+
+/** A snapshot of the run, for a caller that wants to display it. */
+export type AgentProgress = {
+  readonly step: number;
+  readonly mode: "EXPLORING" | "INVESTIGATING";
+  readonly currentFocus: FocusState;
+  readonly lastAction: KeyboardAction | null;
+  readonly discoveredCount: number;
+  readonly visitedCount: number;
+  readonly decision: AgentDecision;
+  readonly state: AgentState;
 };
 
 export const DEFAULT_EXPLORATION_OPTIONS: Omit<ExplorationOptions, "signal" | "now"> =
@@ -254,6 +282,10 @@ export class ExplorationAgent {
         });
         state = applyObservation(state, observation);
         this.#latestScreenshot = executed.observation.screenshot.png;
+        await this.#persistScreenshot(
+          observation.step,
+          executed.observation.screenshot.png,
+        );
         state = applyTransition(state, {
           from: before,
           to: executed.newFocus,
@@ -283,6 +315,7 @@ export class ExplorationAgent {
       });
       state = this.#recordIssue(state, decision, step, observedAt);
       state = this.#validateReport(state, decision, step);
+      this.#report(state, decision, completedStep);
 
       // Development-time check that the transitions above kept memory coherent.
       // A violated invariant means the next finding built from this state would
@@ -386,6 +419,41 @@ export class ExplorationAgent {
     ].join("|");
   }
 
+  /**
+   * Hands a progress snapshot to the caller, if one asked.
+   *
+   * Wrapped because an observer is somebody else's code: a display that throws
+   * must not take the audit down with it.
+   */
+  #report(state: AgentState, decision: AgentDecision, step: AgentStep): void {
+    if (this.#options.onProgress === undefined) return;
+
+    try {
+      this.#options.onProgress({
+        step: step.index,
+        mode: agentMode(state),
+        currentFocus: state.currentFocus,
+        lastAction: step.executedAction,
+        discoveredCount: state.discoveredElements.length,
+        visitedCount: state.visitedElementIds.length,
+        decision,
+        state,
+      });
+    } catch {
+      // Deliberately ignored. See above.
+    }
+  }
+
+  async #persistScreenshot(step: StepIndex, png: Uint8Array): Promise<void> {
+    if (this.#options.onScreenshot === undefined) return;
+
+    try {
+      await this.#options.onScreenshot(step, png);
+    } catch {
+      // A screenshot that could not be written costs evidence, not the run.
+    }
+  }
+
   async #observe(state: AgentState, step: StepIndex): Promise<AgentState> {
     const capture = await this.#deps.page.observe(step);
 
@@ -400,6 +468,7 @@ export class ExplorationAgent {
 
     next = applyObservation(next, capture.observation);
     this.#latestScreenshot = capture.screenshot.png;
+    await this.#persistScreenshot(step, capture.screenshot.png);
     return next;
   }
 
