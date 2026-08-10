@@ -7,8 +7,8 @@ implementation must satisfy.
 
 ## 1. Design principles
 
-1. **The AI explores; it does not drive.** The model chooses *which allowed action to
-   take next*. It never issues browser commands, selectors, scripts, or URLs.
+1. **The AI explores; it does not drive.** The model chooses _which allowed action to
+   take next_. It never issues browser commands, selectors, scripts, or URLs.
 2. **The browser is a narrow appliance.** It accepts exactly one thing: a keyboard action
    from a fixed allowlist. There is no general-purpose escape hatch.
 3. **Determinism where it matters.** The guard, the allowlist, the evidence recorder, and
@@ -82,7 +82,7 @@ The only component that talks to Playwright. Exposes a deliberately small surfac
 
 - `open(url)` — navigate to the target once, at run start.
 - `observe()` — produce an `Observation` (see §3.1).
-- `press(action)` — execute one allowlisted keyboard action. Accepts the action *after*
+- `press(action)` — execute one allowlisted keyboard action. Accepts the action _after_
   the guard has approved it, and re-validates against the allowlist itself as a second
   line of defence.
 - `close()`
@@ -143,10 +143,10 @@ repeatedly requesting a disallowed action is itself signal.
 
 Translates an approved action into a Playwright key press:
 
-| Action      | Key press     |
-| ----------- | ------------- |
-| `TAB`       | `Tab`         |
-| `SHIFT_TAB` | `Shift+Tab`   |
+| Action      | Key press   |
+| ----------- | ----------- |
+| `TAB`       | `Tab`       |
+| `SHIFT_TAB` | `Shift+Tab` |
 
 This table is the whole implementation. Adding a row is a security-relevant change; see
 [SECURITY.md](SECURITY.md).
@@ -243,13 +243,13 @@ Findings are produced by the AI's `REPORT` decision, but each type has a determi
 signal the agent can rely on and the recorder can corroborate. The AI supplies judgement
 and explanation; the recorder supplies proof.
 
-| Finding | Deterministic corroboration |
-| --- | --- |
-| Unreachable interactive element | Element present in `discovered_interactive` but `reached_by_keyboard == false` after traversal is judged complete. |
-| Suspicious focus order | Focus sequence order diverges from DOM order / visual reading order. |
-| Unexpected focus leaving page | `focus_left_page == true` at a step where the traversal was not expected to exit. |
-| Suspicious focus cycle | Focus sequence repeats a cycle that excludes known-reachable elements, or returns to a prior element without covering the set between. |
-| No keyboard-reachable controls | `discovered_interactive` is non-empty and no element was ever focused. |
+| Finding                         | Deterministic corroboration                                                                                                            |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Unreachable interactive element | Element present in `discovered_interactive` but `reached_by_keyboard == false` after traversal is judged complete.                     |
+| Suspicious focus order          | Focus sequence order diverges from DOM order / visual reading order.                                                                   |
+| Unexpected focus leaving page   | `focus_left_page == true` at a step where the traversal was not expected to exit.                                                      |
+| Suspicious focus cycle          | Focus sequence repeats a cycle that excludes known-reachable elements, or returns to a prior element without covering the set between. |
+| No keyboard-reachable controls  | `discovered_interactive` is non-empty and no element was ever focused.                                                                 |
 
 A finding requires **both**: the corroborating signal and the model's `REPORT`. Neither
 alone emits a finding. This keeps hallucinated findings out and keeps unexplained
