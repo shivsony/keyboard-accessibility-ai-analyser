@@ -1,10 +1,6 @@
 import { z } from "zod";
 
-import {
-  BoundingBoxSchema,
-  ElementIdSchema,
-  StepIndexSchema,
-} from "./primitives";
+import { BoundingBoxSchema, ElementIdSchema, StepIndexSchema } from "./primitives";
 
 /** Why the element was treated as interactive. Useful when a finding is disputed. */
 export const ElementDiscoverySourceSchema = z.enum([

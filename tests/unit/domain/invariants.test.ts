@@ -210,7 +210,11 @@ describe("AgentState invariants", () => {
           {
             id: findingId("f1"),
             status: "SUSPECTED",
-            details: { type: "SUSPICIOUS_FOCUS_ORDER", observedOrder: [], expectedOrder: [] },
+            details: {
+              type: "SUSPICIOUS_FOCUS_ORDER",
+              observedOrder: [],
+              expectedOrder: [],
+            },
             reasoning: "Order looks scrambled.",
             confidence: 0.5 as never,
             detectedAtStep: 0,

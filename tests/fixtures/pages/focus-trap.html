@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Focus trap</title>
+  </head>
+  <body>
+    <main>
+      <h1>Focus trap</h1>
+      <button id="outside-before">Before the trap</button>
+
+      <div id="dialog" role="dialog" aria-label="Trapping dialog">
+        <button id="trap-a">Inside A</button>
+        <button id="trap-b">Inside B</button>
+      </div>
+
+      <button id="outside-after">After the trap</button>
+    </main>
+
+    <script>
+      // A hand-rolled trap of the kind that ships in real dialogs: focus is
+      // forced back inside, so Tab cycles between two controls forever and the
+      // rest of the page is unreachable.
+      const inside = ["trap-a", "trap-b"].map((id) => document.getElementById(id));
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Tab") return;
+
+        const active = document.activeElement;
+        const index = inside.indexOf(active);
+        if (index === -1) return;
+
+        event.preventDefault();
+        const next = event.shiftKey ? index - 1 : index + 1;
+        inside[(next + inside.length) % inside.length].focus();
+      });
+
+      document.getElementById("trap-a").focus();
+    </script>
+  </body>
+</html>

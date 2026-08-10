@@ -2,12 +2,7 @@ import { z } from "zod";
 
 import { KeyboardActionSchema } from "./keyboard";
 import type { NodeId } from "./primitives";
-import {
-  ElementIdSchema,
-  NodeIdSchema,
-  StepIndexSchema,
-  UrlSchema,
-} from "./primitives";
+import { ElementIdSchema, NodeIdSchema, StepIndexSchema, UrlSchema } from "./primitives";
 
 /**
  * A distinct focus position the agent has occupied.

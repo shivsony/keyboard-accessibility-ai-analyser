@@ -199,33 +199,85 @@ ElementRef {
 
 ### 3.2 Decision
 
+A discriminated union on `decision`, so the illegal combinations are
+unrepresentable rather than merely discouraged.
+
 ```
-Decision {
-  decision: "CONTINUE" | "INVESTIGATE" | "REPORT" | "STOP"
-  next_keyboard_action: "TAB" | "SHIFT_TAB" | null   // null iff decision == STOP
-  reasoning: string
-  confidence: float              // 0.0 – 1.0
-  suspected_issue: FindingType | null
-}
+AgentDecision =
+  | { decision: "CONTINUE"
+      action: KeyboardAction         // exactly one allowlisted action
+      reasoning: string
+      confidence: float              // 0.0 – 1.0
+      suspectedIssue: null           // CONTINUE makes no claim
+      targetElementId: ElementId | null }
+
+  | { decision: "INVESTIGATE"
+      action: KeyboardAction
+      reasoning: string
+      confidence: float
+      suspectedIssue: FindingType    // required: a suspicion with no type
+      targetElementId: ElementId | null }   //   cannot be corroborated
+
+  | { decision: "REPORT"
+      action: KeyboardAction
+      reasoning: string
+      confidence: float
+      suspectedIssue: FindingType    // required
+      targetElementId: ElementId | null }
+
+  | { decision: "STOP"
+      action: null                   // nothing is pressed once the run is over
+      reasoning: string
+      confidence: float
+      suspectedIssue: null
+      targetElementId: null }
 ```
+
+Note what is absent: no selector, no URL, no script, no free-form command.
+`reasoning` is displayed and stored, never interpreted. Unknown fields are
+stripped at the parse boundary, so a response that invents one has nothing
+downstream to reach.
 
 ### 3.3 Finding
 
+Split by status rather than tagged with one, so reporting cannot accidentally
+publish a suspicion.
+
 ```
-Finding {
-  type: FindingType
-  severity: "low" | "medium" | "high"
+SuspectedFinding {                   // working state — never reported
+  id: FindingId
+  status: "SUSPECTED"
+  details: FindingDetails            // union on `type`, see below
+  reasoning: string
   confidence: float
-  keyboard_sequence: Action[]        // exact, from step 0
-  focus_sequence: ElementRef[]       // parallel to the keyboard sequence
-  screenshot_paths: string[]
-  dom_evidence: string
-  aria_evidence: object
-  ai_reasoning: string
-  likely_cause: string
-  suggested_fix: string
+  detectedAtStep: int
+  detectedAt: Timestamp
+}
+
+ConfirmedFinding {                   // corroborated and reportable
+  ...everything above, status: "CONFIRMED"
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+  evidence: FindingEvidence
+  likelyCause: string
+  suggestedFix: string
+  confirmedAtStep: int
+}
+
+FindingEvidence {
+  keyboardSequence: KeyboardAction[]  // exact, from step 0
+  focusSequence: FocusState[]         // parallel to the keyboard sequence
+  screenshotIds: ScreenshotId[]
+  domEvidence: DOMSnapshot
+  ariaEvidence: AccessibilitySnapshot
   steps: {from: int, to: int}
 }
+
+FindingDetails =                      // the five findings are not one shape
+  | { type: "UNREACHABLE_INTERACTIVE_ELEMENT", elementId }
+  | { type: "SUSPICIOUS_FOCUS_ORDER", observedOrder[], expectedOrder[] }
+  | { type: "UNEXPECTED_FOCUS_LEAVING_PAGE", atStep, lastElementId }
+  | { type: "SUSPICIOUS_FOCUS_CYCLE", cycleElementIds[], excludedElementIds[] }
+  | { type: "NO_KEYBOARD_REACHABLE_CONTROLS", discoveredCount }
 
 FindingType =
   | "UNREACHABLE_INTERACTIVE_ELEMENT"

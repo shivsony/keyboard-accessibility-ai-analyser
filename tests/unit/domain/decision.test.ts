@@ -109,14 +109,11 @@ describe("parseAgentDecision", () => {
     expect(safeParseAgentDecision({ ...CONTINUE, decision: "" }).success).toBe(false);
   });
 
-  it.each([-0.1, 1.1, Number.NaN, "high"])(
-    "rejects confidence %s",
-    (value: unknown) => {
-      expect(safeParseAgentDecision({ ...CONTINUE, confidence: value }).success).toBe(
-        false,
-      );
-    },
-  );
+  it.each([-0.1, 1.1, Number.NaN, "high"])("rejects confidence %s", (value: unknown) => {
+    expect(safeParseAgentDecision({ ...CONTINUE, confidence: value }).success).toBe(
+      false,
+    );
+  });
 
   it("rejects empty reasoning — a decision with no explanation is not evidence", () => {
     expect(safeParseAgentDecision({ ...CONTINUE, reasoning: "" }).success).toBe(false);

@@ -72,7 +72,7 @@ export function makeElement(
 
 export function makeDomSnapshot(overrides: Partial<DOMSnapshot> = {}): DOMSnapshot {
   return {
-    summary: "<main><button id=\"a\">A</button></main>",
+    summary: '<main><button id="a">A</button></main>',
     nodeCount: 4,
     truncated: false,
     capturedAt: at(0),
@@ -182,9 +182,7 @@ export function makeStep(
   };
 }
 
-export function makeEvidence(
-  overrides: Partial<FindingEvidence> = {},
-): FindingEvidence {
+export function makeEvidence(overrides: Partial<FindingEvidence> = {}): FindingEvidence {
   return {
     keyboardSequence: ["TAB"],
     focusSequence: [FOCUS_UNKNOWN],
@@ -214,7 +212,7 @@ export function makeConfirmedFinding(
     severity: "HIGH",
     evidence: makeEvidence(),
     likelyCause: "The control is a div with a click handler and no tabindex.",
-    suggestedFix: "Use a <button>, or add tabindex=\"0\" and keyboard handling.",
+    suggestedFix: 'Use a <button>, or add tabindex="0" and keyboard handling.',
     confirmedAtStep: 0,
     ...overrides,
   };

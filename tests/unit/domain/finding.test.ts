@@ -112,9 +112,8 @@ describe("suspected vs confirmed", () => {
 
   it("rejects an empty suggested fix — a fix nobody can act on is not one", () => {
     expect(
-      ConfirmedFindingSchema.safeParse(
-        makeConfirmedFinding("f1", { suggestedFix: "" }),
-      ).success,
+      ConfirmedFindingSchema.safeParse(makeConfirmedFinding("f1", { suggestedFix: "" }))
+        .success,
     ).toBe(false);
   });
 
@@ -141,7 +140,9 @@ describe("finding evidence", () => {
   it("rejects a negative step in the range", () => {
     expect(
       ConfirmedFindingSchema.safeParse(
-        makeConfirmedFinding("f1", { evidence: makeEvidence({ steps: { from: -1, to: 2 } }) }),
+        makeConfirmedFinding("f1", {
+          evidence: makeEvidence({ steps: { from: -1, to: 2 } }),
+        }),
       ).success,
     ).toBe(false);
   });

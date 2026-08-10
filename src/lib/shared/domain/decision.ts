@@ -5,12 +5,7 @@ import { KeyboardActionSchema } from "./keyboard";
 import { ConfidenceSchema, ElementIdSchema } from "./primitives";
 
 /** What the agent decided to do about what it just saw. */
-export const DecisionKindSchema = z.enum([
-  "CONTINUE",
-  "INVESTIGATE",
-  "REPORT",
-  "STOP",
-]);
+export const DecisionKindSchema = z.enum(["CONTINUE", "INVESTIGATE", "REPORT", "STOP"]);
 export type DecisionKind = z.infer<typeof DecisionKindSchema>;
 
 /**
