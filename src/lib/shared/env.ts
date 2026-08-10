@@ -31,7 +31,16 @@ const envSchema = z.object({
    * message is more use than a generic schema error. Making it required would
    * also mean the browser layer could not be exercised without a key.
    */
-  OPENAI_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: z
+    .string()
+    .optional()
+    // A blank value is treated as absent. `OPENAI_API_KEY=` in a half-filled
+    // .env.local is the most common way to have no key, and it should produce
+    // the AI layer's guidance message rather than a schema error about string
+    // length.
+    .transform((value) =>
+      value === undefined || value.trim() === "" ? undefined : value,
+    ),
   OPENAI_MODEL: z.string().min(1).default("gpt-4o"),
 
   AGENT_MAX_STEPS: z.coerce.number().int().positive().max(1000).default(150),

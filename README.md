@@ -188,6 +188,55 @@ See [SECURITY.md](SECURITY.md) for the full handling rules.
 
 ---
 
+## API
+
+```bash
+curl -X POST http://localhost:3000/api/audits \
+  -H 'content-type: application/json' \
+  -d '{"url":"https://example.com"}'
+# → 202 { "auditId": "..." }
+
+curl http://localhost:3000/api/audits/<id>
+# → { "id", "status", "step", "url", "result", "error", ... }
+
+curl -X DELETE http://localhost:3000/api/audits/<id>
+# → cancels a run in progress
+```
+
+`status` is `queued | running | completed | failed | cancelled`. `result` is the
+report once the audit finishes, and `null` before that.
+
+A run that exhausts its step or time budget still **completes**, with a partial
+report whose `terminationReason` says why — a truncated traversal is a result to
+read carefully, not an error. Only a browser or AI failure marks a run `failed`.
+
+### ⚠️ The MVP needs a long-running Node.js server
+
+There is no queue and no database. Audits are held **in memory in a single Node
+process**, and the run continues after the POST has already responded. That
+means:
+
+- **Deploy to something that stays up** — `next start` on a machine you control,
+  or a container. A serverless platform that freezes or recycles the process
+  once a response is sent will abandon the audit mid-run.
+- **One instance only.** Behind a load balancer, a client polling its audit will
+  hit a different instance and get a 404.
+- **Restarts lose everything.** Finished reports are written to `EVIDENCE_DIR`;
+  the in-memory registry is not persisted.
+
+This is a deliberate MVP shortcut, marked as such in
+[`lib/agent/audit-registry.ts`](src/lib/agent/audit-registry.ts). A queue and a
+store are the obvious next step.
+
+### What the API never returns
+
+No API key, no environment variable, no server filesystem path. Error responses
+are coded and phrased for a human; the underlying cause is never passed through,
+because a driver error can carry a local path and a provider error can echo a
+request header.
+
+---
+
 ## Getting started
 
 Requires Node.js 20.9+ and pnpm.

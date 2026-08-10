@@ -64,6 +64,24 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
 
+  // The codebase uses a leading underscore to mean "deliberately unused" —
+  // omitted destructuring targets, ignored callback parameters. Without this the
+  // convention produces a warning every time it is used correctly.
+  {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
+
   // Baseline for everything under src: no vendor SDKs.
   {
     files: ["src/**/*.{ts,tsx}"],

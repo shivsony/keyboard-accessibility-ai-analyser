@@ -38,10 +38,13 @@ export function createAIProvider(env: Env = getEnv()): AIProvider {
  * never a fragment of it, and never a hint about its shape (SECURITY.md §4).
  */
 export function checkAIConfiguration(
-  env: Env = getEnv(),
+  env?: Env,
 ): { configured: true } | { configured: false; message: string } {
   try {
-    createAIProvider(env);
+    // Resolved inside the try: reading the environment can itself fail, and a
+    // status check that throws is no use to a caller trying to report the
+    // problem politely.
+    createAIProvider(env ?? getEnv());
     return { configured: true };
   } catch (error) {
     return {
