@@ -14,6 +14,9 @@ const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`;
  */
 export default defineConfig({
   testDir: "./tests/e2e",
+  // See tsconfig.e2e.json: the agent tests import server-only modules, which a
+  // plain test runner cannot resolve without a stub.
+  tsconfig: "./tsconfig.e2e.json",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -34,10 +37,14 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          command: "pnpm dev",
+          // A production build, not `next dev`. The dev overlay renders a
+          // focusable <nextjs-portal> element that joins the tab order, which
+          // would make every fixture's expected focus order wrong — and would
+          // be testing a page that does not exist in production.
+          command: "pnpm build && pnpm start",
           url: BASE_URL,
           reuseExistingServer: !process.env.CI,
-          timeout: 120_000,
+          timeout: 300_000,
         },
       }),
 });

@@ -68,6 +68,7 @@ export function makeElement(
     boundingBox: { x: 0, y: 0, width: 100, height: 32 },
     discoveredVia: "NATIVE_CONTROL",
     discoveredAtStep: 0,
+    inModal: false,
     ...overrides,
   };
 }

@@ -1,0 +1,20 @@
+{
+  // TypeScript configuration for the Playwright suite only.
+  //
+  // The e2e tests that drive the agent import `src/lib/browser`, which imports
+  // the `server-only` marker package. That package throws unless the bundler
+  // applies React's `react-server` condition — Next does, and a plain test
+  // runner does not. Vitest solves this with a resolver alias; Playwright reads
+  // tsconfig paths, so it gets the same stub here.
+  //
+  // Confined to this file on purpose. Putting the alias in the root tsconfig
+  // would disable the guard for the application build too, which is the one
+  // place it actually protects something.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "server-only": ["./tests/fixtures/server-only-stub.ts"]
+    }
+  }
+}
