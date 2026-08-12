@@ -34,6 +34,13 @@ export type RawElement = {
   visible: boolean;
   boundingBox: RawBoundingBox | null;
   via: "NATIVE_CONTROL" | "TABINDEX" | "ARIA_ROLE";
+  /**
+   * Whether the element sits inside a modal context.
+   *
+   * Recorded because "focus left the page" and "focus left the dialog" look
+   * identical from a focus position alone, and only the second is a defect.
+   */
+  inModal: boolean;
 };
 
 export type RawFocus =
@@ -163,6 +170,10 @@ export function collectInteractiveElements(limit: number): RawElement[] {
     return null;
   }
 
+  function isInModal(element: Element): boolean {
+    return element.closest('[aria-modal="true"], dialog[open], [role="dialog"]') !== null;
+  }
+
   function describe(element: Element, via: RawElement["via"]): RawElement {
     const rect = element.getBoundingClientRect();
 
@@ -181,6 +192,7 @@ export function collectInteractiveElements(limit: number): RawElement[] {
         height: rect.height,
       },
       via,
+      inModal: isInModal(element),
     };
   }
 
@@ -254,6 +266,8 @@ export function readFocus(): RawFocus {
       // Focus landing somewhere discovery did not predict is itself
       // informative, so it is recorded rather than reclassified.
       via: "NATIVE_CONTROL",
+      inModal:
+        active.closest('[aria-modal="true"], dialog[open], [role="dialog"]') !== null,
     },
   };
 }

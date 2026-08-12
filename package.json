@@ -20,7 +20,10 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
-    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
+    "docs:fixtures": "node --experimental-strip-types scripts/generate-fixture-docs.ts",
+    "test:fixtures": "playwright test tests/e2e/fixtures.spec.ts tests/e2e/fixtures-agent.spec.ts",
+    "test:real-ai": "RUN_REAL_AI_TESTS=1 playwright test tests/e2e/fixtures-real-ai.spec.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

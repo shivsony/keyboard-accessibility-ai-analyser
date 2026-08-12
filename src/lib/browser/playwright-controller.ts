@@ -293,6 +293,7 @@ function toInteractiveElement(
     boundingBox: raw.boundingBox,
     discoveredVia: raw.via,
     discoveredAtStep: atStep,
+    inModal: raw.inModal,
   };
 }
 

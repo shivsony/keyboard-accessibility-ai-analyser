@@ -44,5 +44,7 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // The doc generator runs under `node --experimental-strip-types`, which needs
+  // an explicit .ts extension on its import — something the app build forbids.
+  "exclude": ["node_modules", "scripts"]
 }

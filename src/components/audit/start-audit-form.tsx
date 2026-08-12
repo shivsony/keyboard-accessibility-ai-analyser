@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { ApiError, AuditResponse, StartAuditResponse } from "@/lib/shared/api-types";
+import type { ApiError, StartAuditResponse } from "@/lib/shared/api-types";
 
 /**
  * Starts an audit and sends the user to its live view.

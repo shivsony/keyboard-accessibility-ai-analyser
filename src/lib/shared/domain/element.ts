@@ -48,6 +48,14 @@ export const InteractiveElementSchema = z.object({
   boundingBox: BoundingBoxSchema.nullable(),
   discoveredVia: ElementDiscoverySourceSchema,
   discoveredAtStep: StepIndexSchema,
+  /**
+   * Whether the element sits inside a modal context.
+   *
+   * "Focus left the page" and "focus left the dialog" are indistinguishable
+   * from a focus position alone, and only the second is a defect. This is what
+   * lets the rules layer tell them apart.
+   */
+  inModal: z.boolean(),
 });
 export type InteractiveElement = z.infer<typeof InteractiveElementSchema>;
 

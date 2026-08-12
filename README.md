@@ -188,6 +188,27 @@ See [SECURITY.md](SECURITY.md) for the full handling rules.
 
 ---
 
+## Test fixtures
+
+Nine deterministic pages at `/fixtures`, each isolating one keyboard behaviour,
+with the expected outcome written down — so a change to the agent can be judged
+against something whose answer is already known.
+
+```bash
+pnpm test:fixtures   # fixtures behave as documented, and the agent against them (mock AI)
+pnpm test:real-ai    # the same, against your real provider. Opt-in, costs money.
+```
+
+Full expectations — AI behaviour, browser behaviour, evidence, reportable
+issues — are in [docs/FIXTURES.md](docs/FIXTURES.md), generated from
+[the manifest](src/lib/fixtures/manifest.ts) by `pnpm docs:fixtures`.
+
+> **Audit a production build, not `next dev`.** The dev overlay renders a
+> focusable `<nextjs-portal>` element that joins the tab order, so a dev-mode
+> audit sees a focus position that does not exist in production.
+
+---
+
 ## Pages
 
 | Route                | What it is                                                                                                         |
