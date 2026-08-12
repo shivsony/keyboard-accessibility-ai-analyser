@@ -105,3 +105,91 @@ describe("checkAIConfiguration", () => {
     expect(JSON.stringify(result)).not.toContain("sk-");
   });
 });
+
+describe("Groq", () => {
+  const GROQ_KEY = "gsk-test-not-a-real-key";
+
+  it("builds a Groq provider when selected", () => {
+    const provider = createAIProvider(
+      parseEnv({ AI_PROVIDER: "groq", GROQ_API_KEY: GROQ_KEY }),
+    );
+
+    expect(provider.name).toBe("groq");
+    expect(provider.model).toBe("openai/gpt-oss-120b");
+  });
+
+  // Groq's free models have no vision. Reported honestly, so nobody reads the
+  // findings as though the agent had been looking at the page.
+  it("is text-only by default", () => {
+    const provider = createAIProvider(
+      parseEnv({ AI_PROVIDER: "groq", GROQ_API_KEY: GROQ_KEY }),
+    );
+
+    expect(provider.multimodal).toBe(false);
+  });
+
+  it("can be told to send screenshots for a vision model", () => {
+    const provider = createAIProvider(
+      parseEnv({
+        AI_PROVIDER: "groq",
+        GROQ_API_KEY: GROQ_KEY,
+        AI_IMAGE_MODE: "required",
+      }),
+    );
+
+    expect(provider.multimodal).toBe(true);
+  });
+
+  it("honours a configured model", () => {
+    const provider = createAIProvider(
+      parseEnv({
+        AI_PROVIDER: "groq",
+        GROQ_API_KEY: GROQ_KEY,
+        GROQ_MODEL: "llama-3.3-70b-versatile",
+      }),
+    );
+
+    expect(provider.model).toBe("llama-3.3-70b-versatile");
+  });
+
+  // Naming the wrong variable would send somebody looking in the wrong place,
+  // and the entire value of this message is that it says what to do next.
+  it("names GROQ_API_KEY when the Groq key is missing", () => {
+    expect(() => createAIProvider(parseEnv({ AI_PROVIDER: "groq" }))).toThrow(
+      "AI provider is not configured. Set GROQ_API_KEY.",
+    );
+  });
+
+  it("does not accept an OpenAI key as a substitute", () => {
+    expect(() =>
+      createAIProvider(parseEnv({ AI_PROVIDER: "groq", OPENAI_API_KEY: KEY })),
+    ).toThrow("Set GROQ_API_KEY.");
+  });
+
+  // Both keys can sit in .env.local; AI_PROVIDER decides which is used.
+  it("uses the provider selected, not whichever key happens to be present", () => {
+    const env = parseEnv({
+      AI_PROVIDER: "groq",
+      OPENAI_API_KEY: KEY,
+      GROQ_API_KEY: GROQ_KEY,
+    });
+
+    expect(createAIProvider(env).name).toBe("groq");
+    expect(
+      createAIProvider(parseEnv({ AI_PROVIDER: "openai", OPENAI_API_KEY: KEY })).name,
+    ).toBe("openai");
+  });
+
+  it("never reveals either key", () => {
+    const result = checkAIConfiguration(
+      parseEnv({ AI_PROVIDER: "groq", GROQ_API_KEY: GROQ_KEY }),
+    );
+
+    expect(JSON.stringify(result)).not.toContain(GROQ_KEY);
+    expect(JSON.stringify(result)).not.toContain("gsk-");
+  });
+
+  it("rejects an unsupported provider", () => {
+    expect(() => parseEnv({ AI_PROVIDER: "gemini" })).toThrow(/AI_PROVIDER/);
+  });
+});

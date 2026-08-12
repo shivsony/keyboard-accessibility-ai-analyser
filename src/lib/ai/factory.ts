@@ -3,7 +3,12 @@ import "server-only";
 import { getEnv, type Env } from "@/lib/shared/env";
 
 import { OpenAIProvider } from "./openai-provider";
-import { AIProviderError, NOT_CONFIGURED_MESSAGE, type AIProvider } from "./types";
+import {
+  AIProviderError,
+  notConfiguredMessage,
+  NOT_CONFIGURED_MESSAGE,
+  type AIProvider,
+} from "./types";
 
 /**
  * Builds the configured provider, or refuses to start.
@@ -17,17 +22,36 @@ import { AIProviderError, NOT_CONFIGURED_MESSAGE, type AIProvider } from "./type
  * the key is handled.
  */
 export function createAIProvider(env: Env = getEnv()): AIProvider {
-  switch (env.AI_PROVIDER) {
-    case "openai": {
-      const apiKey = env.OPENAI_API_KEY;
+  const provider = env.AI_PROVIDER;
 
-      if (apiKey === undefined || apiKey.trim() === "") {
-        throw new AIProviderError("NOT_CONFIGURED", NOT_CONFIGURED_MESSAGE);
-      }
+  const apiKey = provider === "groq" ? env.GROQ_API_KEY : env.OPENAI_API_KEY;
 
-      return new OpenAIProvider({ apiKey, model: env.OPENAI_MODEL });
-    }
+  if (apiKey === undefined || apiKey.trim() === "") {
+    throw new AIProviderError("NOT_CONFIGURED", notConfiguredMessage(provider));
   }
+
+  if (provider === "groq") {
+    return new OpenAIProvider({
+      name: "groq",
+      apiKey,
+      model: env.GROQ_MODEL,
+      baseURL: env.GROQ_BASE_URL,
+      // Groq speaks the same chat-completions format but does not offer strict
+      // json_schema on every model, so the shape travels in the prompt and Zod
+      // does the enforcing — which it does either way.
+      responseFormat: "json_object",
+      // Text-only by default: Groq's free models have no vision. `required`
+      // against a text-only model fails every step, which is the intended
+      // behaviour but a poor default to hand somebody.
+      imageMode: env.AI_IMAGE_MODE ?? "text-only",
+    });
+  }
+
+  return new OpenAIProvider({
+    apiKey,
+    model: env.OPENAI_MODEL,
+    imageMode: env.AI_IMAGE_MODE ?? "required",
+  });
 }
 
 /**

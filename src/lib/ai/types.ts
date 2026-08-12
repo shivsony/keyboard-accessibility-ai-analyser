@@ -150,6 +150,19 @@ export function isAIProviderError(error: unknown): error is AIProviderError {
   return error instanceof AIProviderError;
 }
 
-/** The message the brief requires, verbatim, in one place. */
+/** The default message, when no provider has been selected. */
 export const NOT_CONFIGURED_MESSAGE =
   "AI provider is not configured. Set OPENAI_API_KEY.";
+
+/**
+ * The same message, naming the variable the selected provider actually needs.
+ *
+ * Telling somebody using Groq to set `OPENAI_API_KEY` would send them looking
+ * in the wrong place — and the whole value of this message is that it says
+ * exactly what to do next.
+ */
+export function notConfiguredMessage(provider: "openai" | "groq"): string {
+  const variable = provider === "groq" ? "GROQ_API_KEY" : "OPENAI_API_KEY";
+
+  return `AI provider is not configured. Set ${variable}.`;
+}

@@ -70,6 +70,27 @@ export type ImageMode = "required" | "text-only";
 export type OpenAIProviderOptions = {
   readonly apiKey: string;
   readonly model: string;
+  /**
+   * A different OpenAI-compatible endpoint.
+   *
+   * Groq, and several others, speak the same chat-completions wire format. A
+   * base URL is all that separates them, so they share this implementation
+   * rather than each bringing an SDK that would have to be confined and
+   * reviewed on its own.
+   */
+  readonly baseURL?: string;
+  /** How the provider is named in reports. Defaults to "openai". */
+  readonly name?: string;
+  /**
+   * How the decision shape is requested.
+   *
+   * `json_schema` is strict and preferred. `json_object` only asks for valid
+   * JSON, which is all some endpoints support — the shape is then carried in
+   * the prompt, and `AgentDecisionSchema` still decides what is acceptable, so
+   * the guarantee is unchanged. The difference is how often a model gets it
+   * wrong on the first try, not whether a bad answer can get through.
+   */
+  readonly responseFormat?: "json_schema" | "json_object";
   /** Bounded retries when the response does not parse into a valid decision. */
   readonly maxRetries?: number;
   /** Defaults to `required`. */
@@ -108,7 +129,7 @@ function looksImageRelated(message: string): boolean {
 }
 
 export class OpenAIProvider implements AIProvider {
-  readonly name = "openai";
+  readonly name: string;
   readonly model: string;
 
   readonly multimodal: boolean;
@@ -116,6 +137,7 @@ export class OpenAIProvider implements AIProvider {
   #client: OpenAIChatClient;
   #maxRetries: number;
   #imageMode: ImageMode;
+  #responseFormat: "json_schema" | "json_object";
 
   constructor(options: OpenAIProviderOptions) {
     // Belt and braces: the factory checks configuration first, but a provider
@@ -125,7 +147,9 @@ export class OpenAIProvider implements AIProvider {
       throw new AIProviderError("NOT_CONFIGURED", NOT_CONFIGURED_MESSAGE);
     }
 
+    this.name = options.name ?? "openai";
     this.model = options.model;
+    this.#responseFormat = options.responseFormat ?? "json_schema";
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.#imageMode = options.imageMode ?? "required";
     this.multimodal = this.#imageMode === "required";
@@ -135,7 +159,10 @@ export class OpenAIProvider implements AIProvider {
     // do not structurally satisfy a narrowed version of themselves.
     this.#client =
       options.client ??
-      (new OpenAI({ apiKey: options.apiKey }) as unknown as OpenAIChatClient);
+      (new OpenAI({
+        apiKey: options.apiKey,
+        ...(options.baseURL === undefined ? {} : { baseURL: options.baseURL }),
+      }) as unknown as OpenAIChatClient);
   }
 
   async analyzeObservation(
@@ -179,14 +206,17 @@ export class OpenAIProvider implements AIProvider {
         {
           model: this.model,
           messages,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "agent_decision",
-              strict: true,
-              schema: DECISION_JSON_SCHEMA,
-            },
-          },
+          response_format:
+            this.#responseFormat === "json_schema"
+              ? {
+                  type: "json_schema",
+                  json_schema: {
+                    name: "agent_decision",
+                    strict: true,
+                    schema: DECISION_JSON_SCHEMA,
+                  },
+                }
+              : { type: "json_object" },
           max_completion_tokens: MAX_COMPLETION_TOKENS,
         },
         options.signal === undefined ? undefined : { signal: options.signal },
@@ -260,7 +290,19 @@ export class OpenAIProvider implements AIProvider {
   }
 
   #buildMessages(input: AgentAnalysisInput): unknown[] {
-    const content: unknown[] = [{ type: "text", text: buildUserPrompt(input) }];
+    // Without a schema on the request, the shape has to reach the model some
+    // other way. Appended rather than folded into the system prompt so the
+    // prompt stays identical across providers and remains comparable.
+    const shape =
+      this.#responseFormat === "json_object"
+        ? `\n\nRespond with JSON matching exactly this schema, and nothing else:\n${JSON.stringify(
+            DECISION_JSON_SCHEMA,
+          )}`
+        : "";
+
+    const content: unknown[] = [
+      { type: "text", text: `${buildUserPrompt(input)}${shape}` },
+    ];
 
     if (this.#imageMode === "required") {
       content.push({
