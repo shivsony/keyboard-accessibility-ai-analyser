@@ -7,9 +7,14 @@ happens, and decides what to press next using an AI model. When it finds somethi
 looks broken for keyboard users, it writes up a finding with everything needed to
 reproduce it.
 
-The AI is an **exploration agent**, not a post-processing classifier. It is in the loop
-on every step, choosing the next keyboard action from what it just observed — it is not
-handed a finished trace and asked to label it.
+The AI is in the loop **at the junctures that need judgement**, not on every keypress.
+Code sweeps the page — there are only two keys, and pressing Tab is not a decision worth
+paying for — while `lib/rules` watches the trace. When something looks like a defect, the
+model is asked to judge it, with the evidence in front of it.
+
+It is still not a post-processing classifier: it is consulted _during_ the run, it can
+send the agent back to investigate, and nothing reaches a report without it. But it is
+not narrating every step, and an audit of a clean page may not call it at all.
 
 > **Status: pre-implementation.** The application shell, tooling, and internal
 > architecture are in place. The audit engine is not built yet.
@@ -56,6 +61,22 @@ Every iteration:
 
 The AI never executes browser commands. It names an action; the guard decides whether
 that action is allowed to happen. See [SECURITY.md](SECURITY.md).
+
+### When the AI is consulted
+
+`AI_MODE=decision-points` (the default) sweeps deterministically and calls the model at
+junctures: a candidate finding the trace supports, a traversal that has finished, or a
+sweep going in circles. Measured against the nine fixtures:
+
+| Page                                      | AI calls | Prompt tokens |
+| ----------------------------------------- | -------- | ------------- |
+| A clean page (`/fixtures/good`)           | **0**    | **0**         |
+| A page with one defect                    | **1**    | ~2,400        |
+| The same pages under `AI_MODE=every-step` | 10       | ~24,000       |
+
+Detection is unchanged — `lib/rules` finds the defects either way, because it reads the
+trace rather than asking anyone. `AI_MODE=every-step` restores the original behaviour if
+you want to compare the two on the same page.
 
 ---
 

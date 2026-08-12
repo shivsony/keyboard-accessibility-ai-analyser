@@ -320,6 +320,39 @@ FindingType =
 
 ---
 
+## 3.4 When the model is consulted
+
+The loop has two modes, set by `AI_MODE`.
+
+**`decision-points` (default).** `lib/agent/traversal-policy.ts` decides each move
+from `AgentState` alone. Most moves are a sweep — press Tab, observe, continue —
+and cost nothing. The model is consulted only where a judgement is required:
+
+| Decision point       | Condition                                               |
+| -------------------- | ------------------------------------------------------- |
+| `CANDIDATE_FINDING`  | The trace supports a finding type nobody has judged yet |
+| `TRAVERSAL_COMPLETE` | The lap is done and there is a call left to make        |
+| `STUCK`              | The sweep keeps returning to the same state             |
+
+Two rules keep this honest. Coverage-dependent findings — unreachable element,
+focus order, no reachable controls — are held back until the sweep has completed
+a lap, because at step one _every_ control is unreached and escalating then would
+ask the model to judge a traversal that has not happened. And a finding type is
+escalated **once**: a rejected report is recorded, shown back to the model, and
+not asked again without new evidence.
+
+Every step records `decidedBy: "AI" | "POLICY"`, and the report counts them
+separately. A run that swept forty steps and asked twice is a different thing
+from one that asked forty-two times.
+
+**`every-step`.** The original behaviour: the model chooses every keypress. Kept
+so the two can be compared on the same page rather than argued about.
+
+Neither mode changes what is _detected_. `lib/rules` reads the trace, and the
+guard validates every action identically whether a model or the policy chose it.
+
+---
+
 ## 4. Finding detection
 
 Findings are produced by the AI's `REPORT` decision, but each type has a deterministic

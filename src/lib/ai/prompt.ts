@@ -19,10 +19,29 @@ import type { AgentAnalysisInput } from "./types";
  * it is the method, while this file is the rendering of one step's state.
  */
 
-/** How many earlier observations to include. Enough for a cycle to be visible. */
-const OBSERVATION_WINDOW = 6;
-const MAX_ELEMENTS_LISTED = 60;
-const MAX_HISTORY_LISTED = 40;
+/**
+ * Every section has a ceiling.
+ *
+ * Three of these did not, and the cost of a step grew with the length of the
+ * run — a late step could carry several times the payload of an early one, for
+ * information the model had already been told. A prompt whose size depends on
+ * how long you have been running is a prompt nobody has budgeted.
+ */
+const OBSERVATION_WINDOW = 4;
+/** Unreached controls first; the model rarely needs the ones already visited. */
+const MAX_ELEMENTS_LISTED = 12;
+const MAX_HISTORY_LISTED = 12;
+const MAX_NAVIGATION_HOPS = 12;
+const MAX_OPEN_HYPOTHESES = 3;
+const MAX_INVESTIGATION_HYPOTHESES = 3;
+/**
+ * The accessibility tree is the richer signal, so it keeps the larger share.
+ *
+ * Both were 4,000. The DOM summary is captured at up to 400 lines and then
+ * ~90% of it was discarded here anyway — the model never saw the rest.
+ */
+const MAX_ARIA_CHARS = 1_800;
+const MAX_DOM_CHARS = 1_200;
 
 /**
  * The output shape requested of the provider.
@@ -103,21 +122,80 @@ export const DECISION_JSON_SCHEMA = {
   },
 } as const;
 
+/**
+ * One line per control.
+ *
+ * `discoveredVia` and the bounding box are dropped: they were ~40 characters of
+ * every line and no judgement the model makes depends on them. The element id
+ * is a full CSS path, so it is the bulk of what remains — kept, because it is
+ * how the model refers to a control in a report.
+ */
 function describeElement(
   element: InteractiveElement,
   visited: ReadonlySet<string>,
 ): string {
-  const name = element.accessibleName ?? "(no accessible name)";
+  const name = element.accessibleName ?? "(unnamed)";
   const role = element.role ?? element.tagName;
   const flags = [
-    visited.has(element.id) ? "reached" : "NOT REACHED",
+    visited.has(element.id) ? null : "NOT REACHED",
     element.visible ? null : "not visible",
     element.disabled ? "disabled" : null,
-    element.tabIndex === null ? null : `tabindex=${element.tabIndex}`,
-    `via ${element.discoveredVia}`,
   ].filter((flag) => flag !== null);
 
-  return `  - [${element.id}] ${role} "${name}" (${flags.join(", ")})`;
+  const suffix = flags.length === 0 ? "" : ` (${flags.join(", ")})`;
+
+  return `  - [${element.id}] ${role} "${name}"${suffix}`;
+}
+
+/**
+ * Controls worth showing, unreached first.
+ *
+ * On a page with sixty controls the model was sent all sixty every step. What
+ * actually bears on a decision is what has *not* been reached; the rest is
+ * context, and a handful of it is enough.
+ */
+function elementsWorthListing(
+  elements: readonly InteractiveElement[],
+  visited: ReadonlySet<string>,
+): readonly InteractiveElement[] {
+  const unreached = elements.filter((element) => !visited.has(element.id));
+  const reached = elements.filter((element) => visited.has(element.id));
+
+  return [...unreached, ...reached].slice(0, MAX_ELEMENTS_LISTED);
+}
+
+/**
+ * The tail of the traversal path.
+ *
+ * This section had no ceiling and grew one hop per keypress — at 150 steps it
+ * was the single largest thing in the prompt. Only the recent shape of the
+ * traversal informs the next decision; the whole history is in the report.
+ */
+function lastHops(summary: string): string {
+  if (summary === "") return "(nothing traversed yet)";
+
+  const hops = summary.split(" --");
+  if (hops.length <= MAX_NAVIGATION_HOPS) return summary;
+
+  return `… --${hops.slice(-MAX_NAVIGATION_HOPS).join(" --")}`;
+}
+
+/** Turns a decision point into the question the model should answer. */
+function describeDecisionPoint(point: string): string {
+  switch (point) {
+    case "CANDIDATE_FINDING":
+      return "the recorded traversal supports a possible issue. Judge whether it is real, and REPORT it if so.";
+    case "TRAVERSAL_COMPLETE":
+      return "every reachable control has been reached. Decide whether anything is worth reporting, then STOP.";
+    case "STUCK":
+      return "the traversal keeps returning to the same state. Decide whether that is a defect, then STOP.";
+    default:
+      return point;
+  }
+}
+
+function truncate(text: string, limit: number): string {
+  return text.length <= limit ? text : `${text.slice(0, limit)}…`;
 }
 
 function describeFocus(observation: AgentObservation): string {
@@ -159,6 +237,15 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
     `AUDIT GOAL: determine whether a keyboard-only user can reach and operate`,
     `every interactive control on this page, and record any place they cannot.`,
     ``,
+    // The traversal is swept by code; the model is consulted at junctures.
+    // Naming the juncture lets it answer a narrow question instead of
+    // re-deriving the whole situation.
+    ...(input.decisionPoint == null
+      ? []
+      : [
+          `>>> YOU ARE BEING ASKED BECAUSE: ${describeDecisionPoint(input.decisionPoint)}`,
+          ``,
+        ]),
     `STEP ${input.step} of this audit. ${input.stepsRemaining} steps remain in the budget.`,
     `URL: ${input.url}`,
     ``,
@@ -174,7 +261,7 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
       : `  ${history.map((record) => record.action).join(" → ")}`,
     ``,
     `NAVIGATION SO FAR:`,
-    `  ${input.navigationSummary || "(nothing traversed yet)"}`,
+    `  ${lastHops(input.navigationSummary)}`,
     ``,
     `FOCUS HISTORY (most recent ${recent.length}):`,
     recent.length === 0
@@ -188,8 +275,7 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
     `DISCOVERED INTERACTIVE ELEMENTS (${input.discoveredElements.length} total, ${unreached.length} not yet reached):`,
     input.discoveredElements.length === 0
       ? "  (none discovered)"
-      : input.discoveredElements
-          .slice(0, MAX_ELEMENTS_LISTED)
+      : elementsWorthListing(input.discoveredElements, visited)
           .map((element) => describeElement(element, visited))
           .join("\n"),
   ];
@@ -216,7 +302,7 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
       `  Suspicious controls: ${
         investigation.suspiciousElementIds.length === 0
           ? "(none identified)"
-          : investigation.suspiciousElementIds.join(", ")
+          : investigation.suspiciousElementIds.slice(0, 5).join(", ")
       }`,
       `  Keys spent so far: ${
         investigation.evidenceActions.length === 0
@@ -224,10 +310,12 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
           : investigation.evidenceActions.join(" → ")
       }`,
       `  Your hypotheses:`,
-      ...investigation.hypotheses.map(
-        (hypothesis) =>
-          `    - (step ${hypothesis.raisedAtStep}, confidence ${hypothesis.confidence}) ${hypothesis.statement}`,
-      ),
+      ...investigation.hypotheses
+        .slice(-MAX_INVESTIGATION_HYPOTHESES)
+        .map(
+          (hypothesis) =>
+            `    - (step ${hypothesis.raisedAtStep}, confidence ${hypothesis.confidence}) ${truncate(hypothesis.statement, 160)}`,
+        ),
       ``,
       `  Continue with INVESTIGATE while you are still gathering evidence.`,
       `  Return REPORT once the sequence above demonstrates the problem.`,
@@ -244,23 +332,36 @@ export function buildUserPrompt(input: AgentAnalysisInput): string {
     `PREVIOUS FINDINGS — hypotheses you are still testing:`,
     ...(input.suspectedFindings.length === 0
       ? ["  (none raised yet)"]
-      : input.suspectedFindings.map(
-          (finding) =>
-            `  - ${finding.details.type} (confidence ${finding.confidence}): ${finding.reasoning}`,
-        )),
+      : input.suspectedFindings
+          .slice(-MAX_OPEN_HYPOTHESES)
+          .map(
+            (finding) =>
+              `  - ${finding.details.type} (confidence ${finding.confidence}): ${truncate(finding.reasoning, 160)}`,
+          )),
   );
+
+  if (input.rejectedClaims !== undefined && input.rejectedClaims.length > 0) {
+    sections.push(
+      ``,
+      `ALREADY REPORTED AND REFUSED — do not report these again unless you have`,
+      `new evidence the trace supports:`,
+      ...input.rejectedClaims.map(
+        (claim) => `  - ${claim.type}: ${truncate(claim.reasons.join("; "), 200)}`,
+      ),
+    );
+  }
 
   sections.push(
     ``,
     `ACCESSIBILITY TREE (${input.observation.aria.nodeCount} nodes${
       input.observation.aria.truncated ? ", TRUNCATED" : ""
     }):`,
-    input.observation.aria.snapshot.slice(0, 4000),
+    input.observation.aria.snapshot.slice(0, MAX_ARIA_CHARS),
     ``,
     `DOM SUMMARY (${input.observation.dom.nodeCount} nodes${
       input.observation.dom.truncated ? ", TRUNCATED" : ""
     }):`,
-    input.observation.dom.summary.slice(0, 4000),
+    input.observation.dom.summary.slice(0, MAX_DOM_CHARS),
     ``,
     input.screenshot === null
       ? `NO SCREENSHOT was submitted for this step. Reason from the state above.`

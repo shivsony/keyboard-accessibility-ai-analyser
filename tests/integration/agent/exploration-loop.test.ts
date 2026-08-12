@@ -58,6 +58,10 @@ function explorationOptions(
     maxDurationMs: 120_000,
     repeatedStateThreshold: 6,
     maxInvestigationSteps: 12,
+    // These tests script the model's decisions, which only means anything when
+    // the model is asked on every step. The deterministic policy has its own
+    // suite; see "the traversal policy" below.
+    aiMode: "every-step",
     ...overrides,
   };
 }

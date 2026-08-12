@@ -239,7 +239,16 @@ export type EvidenceSection = z.infer<typeof EvidenceSectionSchema>;
  * another layer of interpretation on top of the first.
  */
 export const AiAnalysisSchema = z.object({
+  /** Steps where the model was consulted. */
   decisionsMade: z.number().int().nonnegative(),
+  /**
+   * Steps the traversal policy decided without a model call.
+   *
+   * Reported so the ratio is visible: a run that swept forty steps and asked
+   * twice is a different thing from one that asked forty-two times, and the
+   * report should not hide which it was.
+   */
+  sweptSteps: z.number().int().nonnegative(),
   investigationsOpened: z.number().int().nonnegative(),
   investigationsConfirmed: z.number().int().nonnegative(),
   investigationsAbandoned: z.number().int().nonnegative(),

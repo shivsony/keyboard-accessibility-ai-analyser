@@ -24,9 +24,21 @@ import { StepIndexSchema, TimestampSchema } from "./primitives";
 export const AgentModeSchema = z.enum(["EXPLORING", "INVESTIGATING"]);
 export type AgentMode = z.infer<typeof AgentModeSchema>;
 
+/**
+ * Who chose the action.
+ *
+ * Recorded because a report that counted deterministic sweeps as model
+ * decisions would overstate what the AI did. Most steps of a traversal are
+ * mechanically obvious — press Tab, see where focus goes — and code makes
+ * those. The model is consulted where a judgement is genuinely required.
+ */
+export const DecidedBySchema = z.enum(["AI", "POLICY"]);
+export type DecidedBy = z.infer<typeof DecidedBySchema>;
+
 export const AgentStepSchema = z.object({
   index: StepIndexSchema,
   mode: AgentModeSchema,
+  decidedBy: DecidedBySchema,
   observation: AgentObservationSchema,
   decision: AgentDecisionSchema,
   guardVerdict: ActionGuardVerdictSchema,

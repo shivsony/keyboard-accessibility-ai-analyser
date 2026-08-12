@@ -43,10 +43,13 @@ fabricated findings — a report nobody knows to distrust is worse than no repor
 
 ### AI
 
-| Variable       | Default  | Description                                                                                        |
-| -------------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `AI_PROVIDER`  | `openai` | Which provider to use. `openai` is the only supported value today; anything else fails at startup. |
-| `OPENAI_MODEL` | `gpt-4o` | Model for the decision step. Needs structured outputs, and vision to see screenshots.              |
+| Variable          | Default           | Description                                                                                                                                                                                                                      |
+| ----------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AI_PROVIDER`     | `openai`          | Which provider to use. `openai` is the only supported value today; anything else fails at startup.                                                                                                                               |
+| `OPENAI_MODEL`    | `gpt-4o-mini`     | Model for the decision step. Needs structured outputs, and vision to see screenshots. Roughly a sixteenth of `gpt-4o` per input token.                                                                                           |
+| `AI_MODE`         | `decision-points` | `decision-points` sweeps the page in code and calls the model only where a judgement is needed — a clean page may cost no calls at all. `every-step` restores the original behaviour, at roughly ten times the calls and tokens. |
+| `AI_IMAGE_DETAIL` | `low`             | `low` is a flat 85 tokens per screenshot; `high` tiles a 1280×800 viewport into ~1,105. Low still conveys layout and reading order.                                                                                              |
+| `AI_IMAGE_MODE`   | `required`        | `text-only` for a model without vision. `required` fails a step whose screenshot is missing rather than silently continuing and reporting as though the agent had seen the page.                                                 |
 
 ### Agent limits
 

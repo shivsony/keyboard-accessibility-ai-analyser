@@ -9,8 +9,10 @@ describe("parseEnv", () => {
     const env = parseEnv(MINIMAL);
 
     expect(env.AI_PROVIDER).toBe("openai");
-    expect(env.OPENAI_MODEL).toBe("gpt-4o");
+    expect(env.OPENAI_MODEL).toBe("gpt-4o-mini");
     expect(env.AGENT_MAX_STEPS).toBe(150);
+    expect(env.AI_MODE).toBe("decision-points");
+    expect(env.AI_IMAGE_DETAIL).toBe("low");
     expect(env.BROWSER_HEADLESS).toBe(true);
     expect(env.EVIDENCE_DIR).toBe("./runs");
   });

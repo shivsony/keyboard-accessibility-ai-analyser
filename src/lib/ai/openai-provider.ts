@@ -5,7 +5,7 @@ import OpenAI from "openai";
 import { safeParseAgentDecision, type AgentDecision } from "@/lib/shared/domain";
 
 import { buildUserPrompt, DECISION_JSON_SCHEMA } from "./prompt";
-import { SYSTEM_PROMPT } from "./system-prompt";
+import { ADJUDICATION_PROMPT, SYSTEM_PROMPT } from "./system-prompt";
 import { safeErrorMessage } from "./redact";
 import {
   AIProviderError,
@@ -74,6 +74,11 @@ export type OpenAIProviderOptions = {
   readonly maxRetries?: number;
   /** Defaults to `required`. */
   readonly imageMode?: ImageMode;
+  /**
+   * Image fidelity. Defaults to `low` — 85 tokens per screenshot instead of
+   * roughly 1,105 for a tiled 1280x800 viewport.
+   */
+  readonly imageDetail?: "low" | "high" | "auto";
   /** Injected in tests. Never set in production. */
   readonly client?: OpenAIChatClient;
 };
@@ -116,6 +121,7 @@ export class OpenAIProvider implements AIProvider {
   #client: OpenAIChatClient;
   #maxRetries: number;
   #imageMode: ImageMode;
+  #imageDetail: "low" | "high" | "auto";
 
   constructor(options: OpenAIProviderOptions) {
     // Belt and braces: the factory checks configuration first, but a provider
@@ -128,6 +134,7 @@ export class OpenAIProvider implements AIProvider {
     this.model = options.model;
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.#imageMode = options.imageMode ?? "required";
+    this.#imageDetail = options.imageDetail ?? "low";
     this.multimodal = this.#imageMode === "required";
     // The cast is the price of not leaking SDK types across this boundary.
     // `OpenAIChatClient` is the contract this file depends on; the SDK's own
@@ -267,12 +274,22 @@ export class OpenAIProvider implements AIProvider {
         type: "image_url",
         // Encoded here and sent from Node. The image never passes through the
         // browser, and neither does the key that authorises the request.
-        image_url: { url: this.#encodeScreenshot(input.screenshot) },
+        image_url: {
+          url: this.#encodeScreenshot(input.screenshot),
+          // Without this the API defaults to `auto`, which tiles a 1280x800
+          // screenshot into ~1,105 tokens. `low` is a flat 85.
+          detail: this.#imageDetail,
+        },
       });
     }
 
+    // A decision point means the traversal was swept by code and the model is
+    // being asked one narrow question. The full exploration method — how to
+    // choose keys, when to stop, how to spend a budget — is not its problem.
+    const system = input.decisionPoint == null ? SYSTEM_PROMPT : ADJUDICATION_PROMPT;
+
     return [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: system },
       { role: "user", content },
     ];
   }

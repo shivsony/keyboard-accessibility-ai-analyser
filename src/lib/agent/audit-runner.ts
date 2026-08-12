@@ -86,6 +86,7 @@ export const runAudit: AuditRunner = async ({ auditId, url, signal, progress }) 
       {
         ...DEFAULT_EXPLORATION_OPTIONS,
         maxSteps: env.AGENT_MAX_STEPS,
+        aiMode: env.AI_MODE,
         signal,
         onProgress: (update) => {
           progress.onLive(toLiveSnapshot(update));
@@ -109,6 +110,7 @@ export const runAudit: AuditRunner = async ({ auditId, url, signal, progress }) 
       startedAt,
       completedAt: new Date().toISOString(),
       terminationReason: result.terminationReason,
+      rejectionsByType: result.rejectionsByType,
       method: {
         provider: provider.name,
         model: provider.model,

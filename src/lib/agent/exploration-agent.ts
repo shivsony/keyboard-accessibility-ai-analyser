@@ -8,12 +8,14 @@ import {
   activeInvestigation,
   agentMode,
   checkAgentStateInvariants,
+  confidence,
   createInitialAgentState,
   elementId as toElementId,
   findingId as toFindingId,
   type AgentDecision,
   type AgentState,
   type AgentStep,
+  type FindingType,
   type KeyboardAction,
   type AuditId,
   type FocusState,
@@ -24,6 +26,7 @@ import {
 } from "@/lib/shared/domain";
 
 import { guardDecision, rejectMalformed, validateDecision } from "./action-guard";
+import { decideNextMove, type DecisionPoint } from "./traversal-policy";
 import {
   abandonInvestigation,
   confirmInvestigation,
@@ -78,6 +81,15 @@ export type ExplorationOptions = {
    * conclude on the next one, and the rest of the page still needs covering.
    */
   readonly maxInvestigationSteps: number;
+
+  /**
+   * How often the model is consulted.
+   *
+   * `decision-points` sweeps deterministically and calls the model only where a
+   * judgement is required. `every-step` is the original behaviour, kept so the
+   * two can be compared on the same page.
+   */
+  readonly aiMode?: "decision-points" | "every-step";
   readonly signal?: AbortSignal;
   /** Injected in tests. */
   readonly now?: () => number;
@@ -117,6 +129,7 @@ export const DEFAULT_EXPLORATION_OPTIONS: Omit<ExplorationOptions, "signal" | "n
     maxDurationMs: 300_000,
     repeatedStateThreshold: 6,
     maxInvestigationSteps: 12,
+    aiMode: "decision-points" as const,
   });
 
 export type ExplorationDependencies = {
@@ -130,6 +143,13 @@ export type ExplorationResult = {
   readonly terminationReason: TerminationReason;
   /** Set when the run ended in failure rather than completion. */
   readonly error: Error | null;
+  /**
+   * Why reported findings were refused, by type.
+   *
+   * Carried out of the run so the report can say *why* a suspicion stayed a
+   * suspicion, instead of the generic "the trace did not establish this".
+   */
+  readonly rejectionsByType: Readonly<Record<string, readonly string[]>>;
 };
 
 export class ExplorationAgent {
@@ -145,6 +165,18 @@ export class ExplorationAgent {
    * The state keeps the reference; this keeps the pixels for the next request.
    */
   #latestScreenshot: Uint8Array | null = null;
+
+  /**
+   * Finding types already put to the model.
+   *
+   * Without this the policy escalates the same candidate every step. A real run
+   * spent six consecutive calls reporting the same thing the validator kept
+   * refusing, because nothing remembered it had already asked.
+   */
+  #adjudicated = new Set<FindingType>();
+
+  /** Why a reported finding was refused, so the model can be told. */
+  #rejections = new Map<FindingType, readonly string[]>();
 
   constructor(dependencies: ExplorationDependencies, options: ExplorationOptions) {
     if (!Number.isInteger(options.maxSteps) || options.maxSteps <= 0) {
@@ -176,33 +208,76 @@ export class ExplorationAgent {
 
     for (;;) {
       const stop = this.#shouldStop(state, startedAt, repeats);
-      if (stop !== null) return this.#stop(state, stop);
+
+      if (stop !== null) {
+        // A dead browser is a failure however it was noticed. Detected by the
+        // pre-step check it used to end as STOPPED, while the identical error
+        // from the executor ended as FAILED — the same event with two different
+        // outcomes depending on which line saw it first.
+        return stop === "DRIVER_ERROR"
+          ? this.#fail(state, new Error("The browser is no longer usable"), stop)
+          : this.#stop(state, stop);
+      }
 
       const step = state.currentStep as StepIndex;
       const startedStepAt = new Date(this.#now()).toISOString();
 
-      // ---- ASK THE AI -----------------------------------------------------
+      // ---- POLICY: is this a decision worth paying for? -------------------
+      //
+      // Most steps of a keyboard sweep are mechanically obvious: press Tab, see
+      // where focus lands. Asking a vision model to confirm that, every step,
+      // was the bulk of an audit's cost and produced nothing the trace did not
+      // already say.
+      const move =
+        this.#options.aiMode === "every-step"
+          ? null
+          : decideNextMove(state, {
+              adjudicated: this.#adjudicated,
+              repeats,
+              repeatedStateThreshold: this.#options.repeatedStateThreshold,
+            });
+
+      if (move?.kind === "COMPLETE") return this.#stop(state, move.reason);
+
+      let decidedBy: "AI" | "POLICY" = "AI";
       let raw: AgentDecision;
-      try {
-        raw = await this.#deps.provider.analyzeObservation(
-          this.#buildInput(state, step),
-          {
-            ...(this.#options.signal === undefined
-              ? {}
-              : { signal: this.#options.signal }),
-          },
-        );
-      } catch (error) {
-        if (isAIProviderError(error) && error.code === "CANCELLED") {
-          return this.#stop(state, "CANCELLED");
+
+      if (move?.kind === "SWEEP") {
+        decidedBy = "POLICY";
+        raw = {
+          decision: "CONTINUE",
+          action: move.action,
+          reason: move.reason,
+          confidence: confidence(1),
+        };
+      } else {
+        // A decision point, or every-step mode. The model is consulted, and the
+        // candidate is marked so the same question is not asked twice.
+        if (move?.kind === "ESCALATE" && move.issueType !== null) {
+          this.#adjudicated.add(move.issueType);
         }
-        return this.#fail(
-          state,
-          error,
-          isAIProviderError(error) && error.code === "INVALID_RESPONSE"
-            ? "DECISION_INVALID"
-            : "AI_ERROR",
-        );
+
+        try {
+          raw = await this.#deps.provider.analyzeObservation(
+            this.#buildInput(state, step, move?.decisionPoint ?? null),
+            {
+              ...(this.#options.signal === undefined
+                ? {}
+                : { signal: this.#options.signal }),
+            },
+          );
+        } catch (error) {
+          if (isAIProviderError(error) && error.code === "CANCELLED") {
+            return this.#stop(state, "CANCELLED");
+          }
+          return this.#fail(
+            state,
+            error,
+            isAIProviderError(error) && error.code === "INVALID_RESPONSE"
+              ? "DECISION_INVALID"
+              : "AI_ERROR",
+          );
+        }
       }
 
       // ---- VALIDATE -------------------------------------------------------
@@ -215,6 +290,7 @@ export class ExplorationAgent {
         state = appendStep(state, {
           index: step,
           mode: agentMode(state),
+          decidedBy,
           observation: this.#requireObservation(state),
           decision: raw,
           guardVerdict: rejectMalformed(validation.problem),
@@ -255,6 +331,7 @@ export class ExplorationAgent {
           state = appendStep(state, {
             index: step,
             mode: modeAtDecision,
+            decidedBy,
             observation: decidedFrom,
             decision,
             guardVerdict: verdict,
@@ -298,6 +375,7 @@ export class ExplorationAgent {
       const completedStep: AgentStep = {
         index: step,
         mode: modeAtDecision,
+        decidedBy,
         observation: decidedFrom,
         decision,
         guardVerdict: verdict,
@@ -479,7 +557,11 @@ export class ExplorationAgent {
    * ids beyond element identity, no configuration, and — emphatically — no
    * credentials.
    */
-  #buildInput(state: AgentState, step: StepIndex): AgentAnalysisInput {
+  #buildInput(
+    state: AgentState,
+    step: StepIndex,
+    decisionPoint: DecisionPoint | null,
+  ): AgentAnalysisInput {
     const observation = this.#requireObservation(state);
 
     return {
@@ -497,6 +579,13 @@ export class ExplorationAgent {
       // The image input. Without it the provider fails the step rather than
       // quietly reasoning from text alone.
       screenshot: this.#latestScreenshot,
+      decisionPoint,
+      // Reports the validator has already refused. Telling the model saves it
+      // filing the same one again, which is exactly what happened before.
+      rejectedClaims: [...this.#rejections].map(([type, reasons]) => ({
+        type,
+        reasons,
+      })),
       stepsRemaining: Math.max(0, this.#options.maxSteps - state.currentStep),
     };
   }
@@ -608,7 +697,16 @@ export class ExplorationAgent {
       targetElementId: decision.targetElementId ?? null,
     });
 
-    if (result.outcome === "REJECTED") return state;
+    if (result.outcome === "REJECTED") {
+      // Kept, and shown back to the model. A run that never learns its report
+      // was refused simply files it again — six times, in the case that
+      // prompted this.
+      this.#rejections.set(
+        decision.issue.type,
+        result.problems.map((problem) => problem.detail),
+      );
+      return state;
+    }
 
     // Deduplicated by type: a page has one unreachable-controls problem, not
     // one per step the agent chose to mention it.
@@ -669,6 +767,7 @@ export class ExplorationAgent {
       state: withStatus(state, { kind: "STOPPED", reason }),
       terminationReason: reason,
       error: null,
+      rejectionsByType: Object.fromEntries(this.#rejections),
     };
   }
 
@@ -693,6 +792,7 @@ export class ExplorationAgent {
       }),
       terminationReason: reason,
       error: error instanceof Error ? error : new Error(message),
+      rejectionsByType: Object.fromEntries(this.#rejections),
     };
   }
 }

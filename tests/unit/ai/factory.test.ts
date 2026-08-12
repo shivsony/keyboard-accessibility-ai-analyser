@@ -23,7 +23,7 @@ describe("createAIProvider", () => {
     const provider = createAIProvider(parseEnv({ OPENAI_API_KEY: KEY }));
 
     expect(provider.name).toBe("openai");
-    expect(provider.model).toBe("gpt-4o");
+    expect(provider.model).toBe("gpt-4o-mini");
   });
 
   it("honours a configured model", () => {

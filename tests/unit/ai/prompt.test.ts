@@ -113,7 +113,67 @@ describe("user prompt", () => {
     );
 
     expect(prompt).toContain("80 total");
-    expect(prompt).toContain("20 more not listed");
+    expect(prompt).toContain("68 more not listed");
+  });
+
+  // What bears on a decision is what has *not* been reached. Sending all
+  // eighty controls every step was the single largest section of the prompt.
+  it("lists unreached controls before reached ones", () => {
+    const elements = [
+      makeElement("reached-one", { accessibleName: "Reached one" }),
+      makeElement("reached-two", { accessibleName: "Reached two" }),
+      makeElement("missed", { accessibleName: "Missed" }),
+    ];
+
+    const prompt = buildUserPrompt(
+      makeAnalysisInput({
+        discoveredElements: elements,
+        visitedElementIds: [elementId("reached-one"), elementId("reached-two")],
+      }),
+    );
+
+    const listing = prompt.slice(prompt.indexOf("DISCOVERED INTERACTIVE ELEMENTS"));
+
+    expect(listing.indexOf("Missed")).toBeLessThan(listing.indexOf("Reached one"));
+  });
+
+  // A prompt whose size depends on how long you have been running is a prompt
+  // nobody has budgeted.
+  it("caps the traversal summary rather than growing with the run", () => {
+    const long = Array.from({ length: 200 }, (_u, i) => `Control ${i}`).join(
+      " --TAB--> ",
+    );
+
+    const prompt = buildUserPrompt(makeAnalysisInput({ navigationSummary: long }));
+
+    expect(prompt).toContain("…");
+    expect(prompt.length).toBeLessThan(long.length);
+  });
+
+  // The loop that cost a real run six consecutive identical reports.
+  it("tells the model which reports were already refused", () => {
+    const prompt = buildUserPrompt(
+      makeAnalysisInput({
+        rejectedClaims: [
+          {
+            type: "UNEXPECTED_FOCUS_LEAVING_PAGE",
+            reasons: ["the trace shows no UNEXPECTED_FOCUS_LEAVING_PAGE"],
+          },
+        ],
+      }),
+    );
+
+    expect(prompt).toContain("ALREADY REPORTED AND REFUSED");
+    expect(prompt).toContain("UNEXPECTED_FOCUS_LEAVING_PAGE");
+  });
+
+  it("names the reason it is being consulted", () => {
+    const prompt = buildUserPrompt(
+      makeAnalysisInput({ decisionPoint: "CANDIDATE_FINDING" }),
+    );
+
+    expect(prompt).toContain("YOU ARE BEING ASKED BECAUSE");
+    expect(prompt).toContain("Judge whether it is real");
   });
 
   it("reports truncated captures as truncated", () => {

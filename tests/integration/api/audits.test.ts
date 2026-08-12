@@ -56,6 +56,7 @@ const completingRunner: AuditRunner = async ({ auditId, progress }) => {
       evidence: { items: [], screenshotCount: 0, anyCaptureTruncated: false },
       aiAnalysis: {
         decisionsMade: 3,
+        sweptSteps: 0,
         investigationsOpened: 0,
         investigationsConfirmed: 0,
         investigationsAbandoned: 0,

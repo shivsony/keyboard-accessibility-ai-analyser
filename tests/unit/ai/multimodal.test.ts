@@ -308,3 +308,49 @@ describe("the mocked multimodal provider", () => {
     expect(new MockAIProvider({ multimodal: false }).multimodal).toBe(false);
   });
 });
+
+describe("prompt selection", () => {
+  // The full exploration method is dead weight when the model is being asked
+  // one narrow question about a trace that has already been swept.
+  it("sends the compact prompt at a decision point", async () => {
+    const { client, subject } = provider([JSON.stringify(RAW_CONTINUE)]);
+
+    await subject.analyzeObservation(
+      makeAnalysisInput({ screenshot: PNG, decisionPoint: "CANDIDATE_FINDING" }),
+    );
+
+    const messages = (client.calls[0]?.messages ?? []) as {
+      role: string;
+      content: unknown;
+    }[];
+    const system = String(messages.find((m) => m.role === "system")?.content);
+
+    expect(system).toContain("reviewing a recorded browser trace");
+    expect(system.length).toBeLessThan(3_000);
+  });
+
+  it("sends the full prompt when the model drives every step", async () => {
+    const { client, subject } = provider([JSON.stringify(RAW_CONTINUE)]);
+
+    await subject.analyzeObservation(makeAnalysisInput({ screenshot: PNG }));
+
+    const messages = (client.calls[0]?.messages ?? []) as {
+      role: string;
+      content: unknown;
+    }[];
+    const system = String(messages.find((m) => m.role === "system")?.content);
+
+    expect(system).toContain("You are a keyboard accessibility testing agent");
+  });
+
+  // The single largest per-call saving after cutting the calls themselves.
+  it("asks for low-detail images by default", async () => {
+    const { client, subject } = provider([JSON.stringify(RAW_CONTINUE)]);
+
+    await subject.analyzeObservation(makeAnalysisInput({ screenshot: PNG }));
+
+    expect(userContent(client.calls[0])[1]?.image_url).toMatchObject({
+      detail: "low",
+    });
+  });
+});

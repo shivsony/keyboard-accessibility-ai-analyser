@@ -65,6 +65,23 @@ export type AgentAnalysisInput = {
 
   /** How many steps remain in the budget. Informs when to STOP. */
   readonly stepsRemaining: number;
+
+  /**
+   * Why the model is being consulted, when the traversal policy escalated.
+   *
+   * Null in `every-step` mode. Naming the juncture lets the prompt ask a narrow
+   * question — "is this unreached control a defect?" — rather than re-deriving
+   * the situation from scratch each time.
+   */
+  readonly decisionPoint?: string | null;
+
+  /**
+   * Findings already reported and refused, with the validator's reasons.
+   *
+   * Shown to the model so it does not file the same rejected report again. A
+   * real run spent six consecutive calls doing exactly that.
+   */
+  readonly rejectedClaims?: readonly { type: string; reasons: readonly string[] }[];
 };
 
 /**

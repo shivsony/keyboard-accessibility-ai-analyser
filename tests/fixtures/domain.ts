@@ -166,6 +166,7 @@ export function makeStep(
   return {
     index,
     mode: "EXPLORING",
+    decidedBy: "AI",
     observation: makeObservation(index),
     decision:
       action === null

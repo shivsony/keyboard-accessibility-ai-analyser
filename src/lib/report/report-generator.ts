@@ -305,8 +305,13 @@ export class ReportGenerator {
   #aiAnalysis(): AiAnalysis {
     const { state } = this.#input;
 
+    const aiSteps = state.steps.filter((step) => step.decidedBy === "AI");
+
     return {
-      decisionsMade: state.steps.length,
+      // Only the model's decisions. Counting deterministic sweeps here would
+      // overstate what the AI did and make two runs incomparable.
+      decisionsMade: aiSteps.length,
+      sweptSteps: state.steps.length - aiSteps.length,
       investigationsOpened: state.investigations.length,
       investigationsConfirmed: state.investigations.filter(
         (each) => each.status === "CONFIRMED",
@@ -314,7 +319,7 @@ export class ReportGenerator {
       investigationsAbandoned: state.investigations.filter(
         (each) => each.status === "ABANDONED",
       ).length,
-      reasoningTrail: state.steps.map((step) => ({
+      reasoningTrail: aiSteps.map((step) => ({
         step: step.index,
         decision: step.decision.decision,
         mode: step.mode,

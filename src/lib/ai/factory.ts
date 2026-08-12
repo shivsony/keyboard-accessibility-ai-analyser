@@ -17,17 +17,18 @@ import { AIProviderError, NOT_CONFIGURED_MESSAGE, type AIProvider } from "./type
  * the key is handled.
  */
 export function createAIProvider(env: Env = getEnv()): AIProvider {
-  switch (env.AI_PROVIDER) {
-    case "openai": {
-      const apiKey = env.OPENAI_API_KEY;
+  const apiKey = env.OPENAI_API_KEY;
 
-      if (apiKey === undefined || apiKey.trim() === "") {
-        throw new AIProviderError("NOT_CONFIGURED", NOT_CONFIGURED_MESSAGE);
-      }
-
-      return new OpenAIProvider({ apiKey, model: env.OPENAI_MODEL });
-    }
+  if (apiKey === undefined || apiKey.trim() === "") {
+    throw new AIProviderError("NOT_CONFIGURED", NOT_CONFIGURED_MESSAGE);
   }
+
+  return new OpenAIProvider({
+    apiKey,
+    model: env.OPENAI_MODEL,
+    imageMode: env.AI_IMAGE_MODE,
+    imageDetail: env.AI_IMAGE_DETAIL,
+  });
 }
 
 /**
